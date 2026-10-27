@@ -32,7 +32,7 @@ agent = create_agent(
 )
 
 RUN_CONFIG = {
-    "run_name": "cli-chat-agent",
+    "run_name": "agent-plan",
     "tags": ["cli", "deepseek-flash"],
     "metadata": {"thread_id": "cli-session"},
 }
