@@ -13,7 +13,10 @@ services:
     ports:
       - "6888:5432"
     volumes:
-      - ./postgres_data:/var/lib/postgresql/data
+      # 18- 使用
+      # - ./postgres_data:/var/lib/postgresql/data
+      # 18+版本使用此配置
+      - ./postgres_data:/var/lib/postgresql
 
 volumes:
   postgres_data:
