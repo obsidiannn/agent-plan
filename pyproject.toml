@@ -1,0 +1,32 @@
+[project]
+name = "agent-plan"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [{ name = "sunjx", email = "raymooonn@gmail.com" }]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.143.2",
+    "numpy>=2.0",
+    "pandas>=0.17.1",
+    "mysql-connector-python>=26.7.0",
+    "pymysql>=1.2.3",
+    "pyjwt>=2.15.1",
+    "sqlalchemy>=2.1.4",
+    "tables>=3.11.1",
+    "tdqm>=0.0.1",
+    "uvicorn[standard]>=0.54.0",
+    "deepagents>=0.7.29",
+    "tavily-python>=0.8.5",
+    "langchain-openai>=1.7.2",
+    "sse-starlette>=3.5.0",
+    "psycopg2-binary>=2.9.13",
+]
+
+
+[project.scripts]
+agent-plan = "agent_plan:main"
+
+[build-system]
+requires = ["uv_build>=0.13.1,<0.14.0"]
+build-backend = "uv_build"
