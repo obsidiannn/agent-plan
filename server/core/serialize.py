@@ -1,7 +1,6 @@
 # coding: utf-8
 """SQLAlchemy 模型 / Decimal / datetime 的 JSON 序列化
 
-对应 k-training 中 BigInt.prototype.toJSON 与 Prisma 的序列化行为:
 - Decimal -> float
 - datetime/date -> isoformat
 - BIT(1) bytes -> bool

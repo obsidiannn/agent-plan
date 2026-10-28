@@ -1,7 +1,6 @@
 # coding: utf-8
 """鉴权路由: /api/auth/login | logout | me
 
-对应 k-training 的 src/app/api/auth/*
 """
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse

@@ -33,8 +33,8 @@ from langgraph.checkpoint.base import (
 from sqlalchemy import delete, select
 from sqlalchemy.orm import sessionmaker
 
-from server.db.stocking_engine import engine
-from server.db.stocking_models import (
+from server.db.server_engine import engine
+from server.db.server_models import (
     AgentCheckpoint,
     AgentCheckpointBlob,
     AgentCheckpointWrite,
@@ -55,7 +55,7 @@ def _as_config(thread_id: str, checkpoint_ns: str,
 
 
 class PostgresCheckpointSaver(BaseCheckpointSaver):
-    """把 checkpoints / blobs / writes 落到 PostgreSQL(stocking 库)"""
+    """把 checkpoints / blobs / writes 落到 PostgreSQL( 库)"""
 
     def _load_blobs(self, session, thread_id: str, checkpoint_ns: str,
                     versions: ChannelVersions) -> dict[str, Any]:

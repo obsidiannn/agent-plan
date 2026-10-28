@@ -1,5 +1,4 @@
 # coding: utf-8
-"""stocking 应用配置: 从 .env 读取, 兼容 k-training 的环境变量命名"""
 import os
 from pathlib import Path
 

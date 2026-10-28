@@ -1,15 +1,14 @@
 # coding: utf-8
 """鉴权服务: 用户查询、角色权限聚合、登录时间更新
 
-对应 k-training 的 src/api/service/auth.service.ts
 """
 from datetime import datetime
 
 from sqlalchemy.orm import joinedload
 
 from server.core.logs import logger
-from server.db.stocking_engine import SessionLocal
-from server.db.stocking_models import (
+from server.db.server_engine import SessionLocal
+from server.db.server_models import (
     SysPermission,
     SysRole,
     SysRolePermission,

@@ -1,7 +1,6 @@
 # coding: utf-8
-"""stocking 库 RBAC 模型: 用户 / 角色 / 权限
+""" 库 RBAC 模型: 用户 / 角色 / 权限
 
-对应 k-training 的 prisma/stocking.prisma
 表: sys_user, sys_role, sys_user_role, sys_permission, sys_role_permission
 """
 from sqlalchemy import (

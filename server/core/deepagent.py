@@ -8,7 +8,6 @@ from deepagents.backends import FilesystemBackend
 from langchain_openai import ChatOpenAI
 from server.services import kline_service
 from server.schemas.requests import StockIndexItem
-from server.hikyuu_init import * 
 
 # 使用 ChatOpenAI 并将 base_url 指向 DeepSeek，这是最直接的接入方式
 model = ChatOpenAI(

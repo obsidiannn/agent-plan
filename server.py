@@ -34,7 +34,7 @@ app.include_router(agent_router.router)
 
 @app.get("/")
 def root():
-    return {"data": "stocking api is running"}
+    return {"data": "agent plan api is running"}
 
 
 if __name__ == "__main__":

@@ -1,5 +1,4 @@
 # coding: utf-8
-"""stocking 应用配置: 从 .env 读取, 兼容 k-training 的环境变量命名"""
 import os
 from pathlib import Path
 
@@ -24,10 +23,9 @@ JWT_EXPIRES_DAYS = 7
 AUTH_COOKIE = "k_token"
 
 
-# stocking 库 (用户/角色/权限 RBAC)
 SERVER_DB_HOST = os.getenv("SERVER_DB_HOST", "127.0.0.1")
 SERVER_DB_PORT = int(os.getenv("SERVER_DB_PORT", "6888"))
-SERVER_DB_NAME = os.getenv("SERVER_DB_NAME", "stocking")
+SERVER_DB_NAME = os.getenv("SERVER_DB_NAME", "agent-plan")
 SERVER_DB_USER = os.getenv("SERVER_DB_USER", "root")
 SERVER_DB_PASSWORD = os.getenv("SERVER_DB_PASSWORD", "888888")
 
