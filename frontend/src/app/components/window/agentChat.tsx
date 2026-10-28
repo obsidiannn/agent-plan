@@ -5,87 +5,8 @@ import { useCallback, useEffect, useId, useRef, useState } from "react"
 interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
-  // 工具调用轨迹, 与正文分开存, 避免污染 JSON 解析
+  // 工具调用轨迹, 与正文分开存
   trace?: string[]
-}
-
-/** 模型按输出契约(promot.md #输出契约)返回的结构化结论 */
-interface AgentContract {
-  index_environment?: {
-    overall?: string
-    by_index?: { index_code?: string, trend?: string, recent_return?: string, verdict?: string, as_of?: string }[]
-    divergence?: string | null
-  }
-  strategy_in_list?: string
-  strategy_fit?: {
-    verdict?: string
-    premises_checked?: { premise?: string, holds?: boolean, evidence?: string }[]
-    index_conflict?: string | null
-  }
-  stock_fit?: {
-    conditions?: { condition?: string, result?: string, value?: string, source_tool?: string }[]
-    core_failures?: string[]
-    unverifiable?: string[]
-  }
-  entry_decision?: string
-  suggest_price?: {
-    value?: number | null
-    basis?: string
-    method?: string
-    anchors?: { label?: string, value?: string, source_tool?: string, as_of?: string }[]
-    as_of?: string
-  }
-  recommended_strategies?: {
-    strategy_type?: string
-    index_evidence?: string[]
-    additional_data_needed?: string[]
-  }[]
-  conflict?: string | null
-  confidence?: number
-  confidence_reducers?: string[]
-  data_gaps?: string[]
-  assumptions?: string[]
-}
-
-/** 契约里的枚举值 -> 颜色 */
-const VERDICT_COLOR: Record<string, string> = {
-  buy: '#16a34a', pass: '#16a34a', effective: '#16a34a', 'risk-on': '#16a34a', true: '#16a34a',
-  watch: '#d97706', unverifiable: '#d97706', degraded: '#d97706', neutral: '#d97706',
-  avoid: '#dc2626', fail: '#dc2626', invalid: '#dc2626', 'risk-off': '#dc2626', false: '#dc2626',
-}
-
-/** 从模型输出里抠出 JSON: 容忍 ``` 包裹和前后废话, 解析不了返回 null 走纯文本 */
-const parseContract = (raw: string): AgentContract | null => {
-  const start = raw.indexOf('{')
-  const end = raw.lastIndexOf('}')
-  if (start < 0 || end <= start) {
-    return null
-  }
-  try {
-    return JSON.parse(raw.slice(start, end + 1)) as AgentContract
-  } catch {
-    return null
-  }
-}
-
-const Tag = (props: { label: string, value?: string }) => props.value ? <span style={{
-  display: 'inline-block',
-  padding: '1px 8px',
-  borderRadius: 4,
-  fontSize: 12,
-  background: VERDICT_COLOR[props.value] ?? '#64748b',
-  color: '#ffffff',
-  marginRight: 6,
-}}>
-  {props.label}: {props.value}
-</span> : <></>
-
-const Line = (props: { title: string, items?: (string | null | undefined)[], color?: string }) => {
-  const items = (props.items ?? []).filter(Boolean) as string[]
-  return items.length === 0 ? <></> : <div style={{ marginTop: 6 }}>
-    <span style={{ fontWeight: 600, color: '#334155' }}>{props.title}: </span>
-    <span style={{ color: props.color ?? '#475569' }}>{items.join('；')}</span>
-  </div>
 }
 
 /** 生成会话 ID (不用 crypto.randomUUID: http 部署下非安全上下文, 该 API 不存在) */
@@ -238,7 +159,7 @@ const AgentChatDialog = (props: any) => {
         buffer = blocks.pop() ?? ''
         for (const block of blocks) {
           handleSseBlock(block, appendToLast, appendTrace, (id) => {
-            sessionRef.current = { key, id }
+            sessionRef.current = { id }
           })
         }
       }
