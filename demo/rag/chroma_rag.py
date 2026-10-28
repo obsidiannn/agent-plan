@@ -17,15 +17,19 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.runnables import RunnablePassthrough
 from langchain_openai import ChatOpenAI
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from ragas import EvaluationDataset, evaluate
+from ragas.embeddings import LangchainEmbeddingsWrapper
+from ragas.llms import LangchainLLMWrapper
+from ragas.metrics import AnswerRelevancy, Faithfulness
 
 
 CHROMA_HOST = os.environ.get("CHROMA_HOST", "localhost")
 CHROMA_PORT = int(os.environ.get("CHROMA_PORT", "8000"))
 COLLECTION_NAME = "rag-demo"
 REBUILD = True  # 换知识库后需重建一次索引; 之后可改为 False 复用服务端集合
+EVAL_ENABLED = True  # 每轮回答后是否用 ragas 即时打分(可用 /eval 命令切换)
 
 RESOURCE_FILE = Path(__file__).resolve().parents[2] / "resource" / "三体.txt"
 
@@ -96,21 +100,46 @@ def build_chain(embeddings: Embeddings):
         ("human", "{question}"),
     ])
 
-    return (
-        RunnablePassthrough.assign(
-            context=lambda x: format_docs(retriever.invoke(x["question"]))
-        )
-        | prompt
-        | llm
-        | StrOutputParser()
+    answer_chain = prompt | llm | StrOutputParser()
+    return answer_chain, retriever
+
+
+def build_judge() -> tuple:
+    """ragas 的评委: LLM 判 Faithfulness, Embedding 判 AnswerRelevancy"""
+    llm = ChatOpenAI(
+        model="deepseek-flash",
+        api_key=os.environ["OPENAI_API_KEY"],
+        base_url=os.environ["OPENAI_BASE_URL"],
+        max_tokens=1024,
     )
+    return LangchainLLMWrapper(llm), LangchainEmbeddingsWrapper(build_embeddings())
+
+
+def score_answer(question: str, answer: str, contexts: list[str],
+                 judge_llm, judge_embeddings) -> dict:
+    """对单轮问答即时打分, 返回 {指标名: 分数}"""
+    dataset = EvaluationDataset.from_list([{
+        "user_input": question,
+        "response": answer,
+        "retrieved_contexts": contexts,
+    }])
+    result = evaluate(
+        dataset=dataset,
+        metrics=[Faithfulness(), AnswerRelevancy()],
+        llm=judge_llm,
+        embeddings=judge_embeddings,
+    )
+    return result.scores[0]
 
 
 def main() -> None:
-    chain = build_chain(build_embeddings())
+    embeddings = build_embeddings()
+    answer_chain, retriever = build_chain(embeddings)
+    judge_llm, judge_embeddings = build_judge()
     history: list = []
+    eval_on = EVAL_ENABLED
 
-    print("exit/quit 退出, /clear 清空历史")
+    print("exit/quit 退出, /clear 清空历史, /eval 开关评测")
     while True:
         try:
             user_input = input("you: ").strip()
@@ -125,14 +154,33 @@ def main() -> None:
             history.clear()
             print("已清空会话历史")
             continue
+        if user_input == "/eval":
+            eval_on = not eval_on
+            print(f"评测已{'开启' if eval_on else '关闭'}")
+            continue
         try:
-            answer = chain.invoke({"question": user_input, "history": history})
+            docs = retriever.invoke(user_input)
+            answer = answer_chain.invoke({
+                "context": format_docs(docs),
+                "question": user_input,
+                "history": history,
+            })
         except Exception as exc:  # noqa: BLE001
             print(f"请求出错: {exc}")
             continue
         history.append(HumanMessage(content=user_input))
         history.append(AIMessage(content=answer))
         print(f"AI: {answer}")
+        if eval_on:
+            try:
+                scores = score_answer(
+                    user_input, answer, [d.page_content for d in docs],
+                    judge_llm, judge_embeddings,
+                )
+                print("[评测] " + ", ".join(
+                    f"{k}={v:.3f}" for k, v in scores.items()))
+            except Exception as exc:  # noqa: BLE001
+                print(f"[评测失败] {exc}")
 
 
 if __name__ == "__main__":
