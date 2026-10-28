@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgres"
+}
+
+/// 用户
+model SysUser {
+  id            BigInt    @id @default(autoincrement())
+  username      String    @unique(map: "unq_sys_user_username") @db.VarChar(64)
+  password      String    @db.VarChar(255)
+  nickname      String?   @db.VarChar(64)
+  email         String?   @db.VarChar(128)
+  phone         String?   @db.VarChar(32)
+  avatar        String?   @db.VarChar(512)
+  /// 1 启用 / 0 禁用
+  status        Int       @default(1) @db.TinyInt
+  last_login_at DateTime? @db.DateTime(0)
+  create_time   DateTime  @default(now()) @db.DateTime(0)
+  update_time   DateTime  @default(now()) @updatedAt @db.DateTime(0)
+
+  user_roles SysUserRole[]
+
+  @@map("sys_user")
+}
+
+/// 角色
+model SysRole {
+  id          BigInt   @id @default(autoincrement())
+  role_code   String   @unique(map: "unq_sys_role_code") @db.VarChar(64)
+  role_name   String   @db.VarChar(64)
+  description String?  @db.VarChar(255)
+  /// 1 启用 / 0 禁用
+  status      Int      @default(1) @db.TinyInt
+  create_time DateTime @default(now()) @db.DateTime(0)
+  update_time DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  user_roles       SysUserRole[]
+  role_permissions SysRolePermission[]
+
+  @@map("sys_role")
+}
+
+/// 用户 - 角色
+model SysUserRole {
+  id      BigInt @id @default(autoincrement())
+  user_id BigInt
+  role_id BigInt
+
+  user SysUser @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  role SysRole @relation(fields: [role_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, role_id], map: "unq_sys_user_role")
+  @@index([role_id], map: "idx_sys_user_role_role_id")
+  @@map("sys_user_role")
+}
+
+/// 权限: 页面(page) 与 接口(api)
+model SysPermission {
+  id          BigInt   @id @default(autoincrement())
+  /// 唯一权限标识, 如 page:/strategy/snapshot、api:POST:/api/data
+  perm_code   String   @unique(map: "unq_sys_permission_code") @db.VarChar(160)
+  perm_name   String   @db.VarChar(128)
+  /// page | api
+  perm_type   String   @db.VarChar(16)
+  /// 上级权限 id, 0 表示顶级
+  parent_id   BigInt   @default(0)
+  /// 页面路由 或 接口路径
+  path        String?  @db.VarChar(255)
+  /// 接口方法 GET/POST/PUT/DELETE, 页面为空
+  method      String?  @db.VarChar(16)
+  sort        Int      @default(0)
+  /// 1 启用 / 0 禁用
+  status      Int      @default(1) @db.TinyInt
+  create_time DateTime @default(now()) @db.DateTime(0)
+  update_time DateTime @default(now()) @updatedAt @db.DateTime(0)
+
+  role_permissions SysRolePermission[]
+
+  @@index([perm_type], map: "idx_sys_permission_type")
+  @@index([parent_id], map: "idx_sys_permission_parent_id")
+  @@map("sys_permission")
+}
+
+/// 角色 - 权限
+model SysRolePermission {
+  id      BigInt @id @default(autoincrement())
+  role_id BigInt
+  perm_id BigInt
+
+  role SysRole       @relation(fields: [role_id], references: [id], onDelete: Cascade)
+  perm SysPermission @relation(fields: [perm_id], references: [id], onDelete: Cascade)
+
+  @@unique([role_id, perm_id], map: "unq_sys_role_permission")
+  @@index([perm_id], map: "idx_sys_role_permission_perm_id")
+  @@map("sys_role_permission")
+}
