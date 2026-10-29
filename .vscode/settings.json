@@ -1,0 +1,14 @@
+{
+    "editor.fontSize": 16,
+    "python.envFile": "${workspaceFolder}/.vscode/.env",
+    "python.venvPath": "./venv",
+    "python.autoComplete.extraPaths": [],
+    "python.analysis.indexing": true,
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python", // Linux/macOS
+    "python.terminal.activateEnvironment": true,
+    "python.analysis.inlayHints.functionReturnTypes": true,
+    "python.analysis.diagnosticMode": "workspace",
+    "editor.gotoLocation.multipleDefinitions": "peek",
+    "editor.gotoLocation.multipleReferences": "peek",
+    "python.analysis.extraPaths": []
+}

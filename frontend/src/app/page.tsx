@@ -4,7 +4,7 @@ import { useAuth } from "./providers/AuthProvider";
 
 /** 菜单项与对应的页面权限码 */
 const MENUS = [
-  { href: "/window/chat", label: "快照", perm: "page:/window/chat" },
+  { href: "/agent/rag", label: "rag chat", perm: "page:/agent/rag" },
 ];
 
 export default function Home() {

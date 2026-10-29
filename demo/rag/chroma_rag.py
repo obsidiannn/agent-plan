@@ -6,32 +6,49 @@
 
     uv run python demo/rag/chroma_rag.py
 """
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.embeddings import Embeddings
+from langchain_core.documents import Document
+from langchain_chroma import Chroma
+from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
+import chromadb
+import json
 import os
+import sys
 from pathlib import Path
 
-import chromadb
-from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
-from langchain_chroma import Chroma
-from langchain_core.documents import Document
-from langchain_core.embeddings import Embeddings
-from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_openai import ChatOpenAI
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from ragas import EvaluationDataset, evaluate
-from ragas.embeddings import LangchainEmbeddingsWrapper
-from ragas.llms import LangchainLLMWrapper
-from ragas.metrics import AnswerRelevancy, Faithfulness
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import config  # noqa: F401,E402  加载 demo/.env(含代理配置)
 
 
 CHROMA_HOST = os.environ.get("CHROMA_HOST", "localhost")
 CHROMA_PORT = int(os.environ.get("CHROMA_PORT", "8000"))
 COLLECTION_NAME = "rag-demo"
-REBUILD = True  # 换知识库后需重建一次索引; 之后可改为 False 复用服务端集合
-EVAL_ENABLED = True  # 每轮回答后是否用 ragas 即时打分(可用 /eval 命令切换)
+REBUILD = False  # 换知识库后需重建一次索引; 之后可改为 False 复用服务端集合
+EVAL_ENABLED = True  # 每轮回答后是否用 LLM 自评打分(可用 /eval 命令切换)
 
 RESOURCE_FILE = Path(__file__).resolve().parents[2] / "resource" / "三体.txt"
+
+
+def configure_proxy() -> None:
+    """让 Chroma 下载 ONNX 模型时走代理。
+
+    Chroma 的下载基于 httpx(trust_env=True), 会读取 HTTP_PROXY/HTTPS_PROXY/ALL_PROXY;
+    同时把 localhost 加入 NO_PROXY, 避免本地 Chroma Server 的请求被代理。
+    """
+    proxy = os.environ.get("RAG_PROXY") or os.environ.get("HTTPS_PROXY")
+    if not proxy:
+        return
+    for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
+        os.environ.setdefault(key, proxy)
+    no_proxy = os.environ.get("NO_PROXY", "")
+    os.environ["NO_PROXY"] = ",".join(
+        filter(None, [no_proxy, "localhost", "127.0.0.1"]))
+    print(f"已启用代理: {proxy}")
 
 
 class ChromaLocalEmbeddings(Embeddings):
@@ -61,7 +78,8 @@ def build_vectorstore(embeddings: Embeddings) -> Chroma:
             client.delete_collection(COLLECTION_NAME)
         except Exception:  # noqa: BLE001  集合不存在时忽略
             pass
-    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=500, chunk_overlap=100)
     chunks = splitter.split_documents(
         [Document(
             page_content=RESOURCE_FILE.read_text(encoding="utf-8"),
@@ -104,38 +122,44 @@ def build_chain(embeddings: Embeddings):
     return answer_chain, retriever
 
 
-def build_judge() -> tuple:
-    """ragas 的评委: LLM 判 Faithfulness, Embedding 判 AnswerRelevancy"""
+def build_judge():
+    """自研评委: 用同一个 LLM 对回答就"忠于上下文"与"切题"两相打分"""
     llm = ChatOpenAI(
         model="deepseek-flash",
         api_key=os.environ["OPENAI_API_KEY"],
         base_url=os.environ["OPENAI_BASE_URL"],
-        max_tokens=1024,
+        max_tokens=512,
+        temperature=0,
     )
-    return LangchainLLMWrapper(llm), LangchainEmbeddingsWrapper(build_embeddings())
+    prompt = ChatPromptTemplate.from_messages([
+        ("system",
+         "你是严格的评测员。依据【资料】评判【回答】, 只输出 JSON, 不要任何多余文字:\n"
+         '{{"faithfulness": 0-1, "answer_relevancy": 0-1}}\n'
+         "faithfulness: 回答的每个论断是否都能在资料中找到依据(1 完全有据, 0 全是编造)。\n"
+         "answer_relevancy: 回答是否切中问题(1 完全切题, 0 答非所问)。"),
+        ("human", "【资料】\n{context}\n\n【问题】\n{question}\n\n【回答】\n{answer}"),
+    ])
+    return prompt | llm | StrOutputParser()
 
 
-def score_answer(question: str, answer: str, contexts: list[str],
-                 judge_llm, judge_embeddings) -> dict:
+def score_answer(question: str, answer: str, contexts: list[str], judge) -> dict:
     """对单轮问答即时打分, 返回 {指标名: 分数}"""
-    dataset = EvaluationDataset.from_list([{
-        "user_input": question,
-        "response": answer,
-        "retrieved_contexts": contexts,
-    }])
-    result = evaluate(
-        dataset=dataset,
-        metrics=[Faithfulness(), AnswerRelevancy()],
-        llm=judge_llm,
-        embeddings=judge_embeddings,
-    )
-    return result.scores[0]
+    raw = judge.invoke({
+        "context": "\n\n".join(contexts),
+        "question": question,
+        "answer": answer,
+    })
+    start, end = raw.find("{"), raw.rfind("}")
+    if start < 0 or end <= start:
+        return {}
+    return json.loads(raw[start:end + 1])
 
 
 def main() -> None:
+    configure_proxy()
     embeddings = build_embeddings()
     answer_chain, retriever = build_chain(embeddings)
-    judge_llm, judge_embeddings = build_judge()
+    judge = build_judge()
     history: list = []
     eval_on = EVAL_ENABLED
 
@@ -174,8 +198,7 @@ def main() -> None:
         if eval_on:
             try:
                 scores = score_answer(
-                    user_input, answer, [d.page_content for d in docs],
-                    judge_llm, judge_embeddings,
+                    user_input, answer, [d.page_content for d in docs], judge,
                 )
                 print("[评测] " + ", ".join(
                     f"{k}={v:.3f}" for k, v in scores.items()))
