@@ -14,9 +14,12 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.embeddings import Embeddings
 from langchain_core.documents import Document
 from langchain_chroma import Chroma
-from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
+from huggingface_hub import hf_hub_download
+from tokenizers import Tokenizer
 import chromadb
+import onnxruntime as ort
 import json
+import numpy as np
 import os
 import sys
 from pathlib import Path
@@ -32,6 +35,19 @@ REBUILD = False  # 换知识库后需重建一次索引; 之后可改为 False �
 EVAL_ENABLED = True  # 每轮回答后是否用 LLM 自评打分(可用 /eval 命令切换)
 
 RESOURCE_FILE = Path(__file__).resolve().parents[2] / "resource" / "三体.txt"
+
+# 中文 Embedding: 本地 ONNX 版 bge-small-zh-v1.5(无需 API Key, 无需 torch)
+EMBED_REPO = "Xenova/bge-small-zh-v1.5"
+EMBED_DIR = Path.home() / ".cache" / "chroma" / \
+    "onnx_models" / "bge-small-zh-v1.5"
+EMBED_FILES = (
+    "onnx/model.onnx",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "special_tokens_map.json",
+    "config.json",
+)
+EMBED_MAX_LENGTH = 512
 
 
 def configure_proxy() -> None:
@@ -51,33 +67,80 @@ def configure_proxy() -> None:
     print(f"已启用代理: {proxy}")
 
 
-class ChromaLocalEmbeddings(Embeddings):
-    """把 Chroma 自带的本地 ONNX 模型(MiniLM)适配成 LangChain 的 Embeddings 接口。
+def download_embed_model() -> None:
+    """从 HuggingFace 拉取中文 ONNX 模型, 缺哪个文件补哪个(已缓存则跳过)。"""
+    for name in EMBED_FILES:
+        if (EMBED_DIR / name).exists():
+            continue
+        print(f"下载 Embedding 模型文件: {name}")
+        hf_hub_download(repo_id=EMBED_REPO, filename=name,
+                        local_dir=str(EMBED_DIR))
 
-    无需任何 API Key / 外部服务, 模型已缓存在 ~/.cache/chroma/onnx_models
+
+class ChineseOnnxEmbeddings(Embeddings):
+    """中文 ONNX Embedding 适配 LangChain 接口。
+
+    模型: bge-small-zh-v1.5(ONNX 版), 走 onnxruntime CPU 推理;
+    分词用 tokenizers 的 WordPiece(模型 vocab 覆盖中文, 不再塌缩成 [UNK]);
+    池化方式与 BGE 一致: 取 [CLS] 向量再做 L2 归一化。
     """
 
-    def __init__(self) -> None:
-        self._fn = DefaultEmbeddingFunction()
+    def __init__(self, batch_size: int = 16) -> None:
+        download_embed_model()
+        self._batch_size = batch_size
+        self._tokenizer = Tokenizer.from_file(
+            str(EMBED_DIR / "tokenizer.json"))
+        self._tokenizer.enable_truncation(max_length=EMBED_MAX_LENGTH)
+        # batch 内序列长度不一, 必须 padding 到等长才能拼成规整的 2D 张量
+        self._tokenizer.enable_padding(
+            pad_id=0, pad_token="[PAD]", pad_type_id=0)
+        self._session = ort.InferenceSession(
+            str(EMBED_DIR / "onnx" / "model.onnx"),
+            providers=["CPUExecutionProvider"],
+        )
+        self._input_names = {i.name for i in self._session.get_inputs()}
+
+    def _encode(self, texts: list[str]) -> list[list[float]]:
+        encodings = self._tokenizer.encode_batch(texts)
+        input_ids = np.array([e.ids for e in encodings], dtype=np.int64)
+        attention_mask = np.array(
+            [e.attention_mask for e in encodings], dtype=np.int64)
+        feed = {"input_ids": input_ids, "attention_mask": attention_mask}
+        if "token_type_ids" in self._input_names:
+            feed["token_type_ids"] = np.zeros_like(input_ids)
+        last_hidden = self._session.run(None, feed)[0]
+        cls = last_hidden[:, 0, :]
+        norm = np.clip(np.linalg.norm(cls, axis=1, keepdims=True), 1e-12, None)
+        return (cls / norm).tolist()
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return [list(map(float, vec)) for vec in self._fn(texts)]
+        vectors: list[list[float]] = []
+        for i in range(0, len(texts), self._batch_size):
+            vectors.extend(self._encode(texts[i:i + self._batch_size]))
+        return vectors
 
     def embed_query(self, text: str) -> list[float]:
-        return self.embed_documents([text])[0]
+        return self._encode([text])[0]
 
 
 def build_embeddings() -> Embeddings:
-    return ChromaLocalEmbeddings()
+    return ChineseOnnxEmbeddings()
 
 
 def build_vectorstore(embeddings: Embeddings) -> Chroma:
-    if REBUILD:
-        client = chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)
-        try:
-            client.delete_collection(COLLECTION_NAME)
-        except Exception:  # noqa: BLE001  集合不存在时忽略
-            pass
+    if not REBUILD:
+        # 复用服务端已有集合, 避免每次启动都重复切分/灌库
+        return Chroma(
+            collection_name=COLLECTION_NAME,
+            embedding_function=embeddings,
+            host=CHROMA_HOST,
+            port=CHROMA_PORT,
+        )
+    client = chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)
+    try:
+        client.delete_collection(COLLECTION_NAME)
+    except Exception:  # noqa: BLE001  集合不存在时忽略
+        pass
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=500, chunk_overlap=100)
     chunks = splitter.split_documents(
