@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import StreamingResponse
 from sse_starlette.sse import EventSourceResponse
 import json
 from server.schemas import requests
@@ -11,7 +10,7 @@ from server.core.deps import require_auth
 import uuid
 
 router = APIRouter(
-    prefix="/api", tags=["agent"], dependencies=[Depends(require_auth)])
+    prefix="/api", tags=["agent"], )
 
 
 @router.post("/agent/chroma")
@@ -88,3 +87,15 @@ async def graph_resume(request: requests.GraphDecisionRequest):
     恢复后可能再次挂起(返回 interrupted), 也可能跑完(返回 finished), 由前端按 status 判断。
     """
     return await graph_core.resume(request.conversation_id, request.decision)
+
+
+@router.get("/agent/graph/sessions")
+async def graph_sessions():
+    """历史会话列表(按最近更新倒序), 供前端左侧列表展示"""
+    return {"sessions": await graph_core.list_sessions()}
+
+
+@router.get("/agent/graph/history")
+async def graph_history(conversation_id: str):
+    """按 conversation_id 读取某个历史会话的完整消息与挂起状态"""
+    return await graph_core.history(conversation_id)
