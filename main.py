@@ -2,15 +2,26 @@
 
 import uvicorn
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from server.config import CORS_ORIGINS
 from server.core import auth
+from server.db.agent_checkpoint import init_agent_checkpoint_tables
 from server.routers import auth as auth_router, agent as agent_router
 
-app = FastAPI(title="server")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动时确保 LangGraph 检查点表存在(幂等), 供人工审批工作流落库
+    init_agent_checkpoint_tables()
+    yield
+
+
+app = FastAPI(title="server", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

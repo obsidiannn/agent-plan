@@ -6,6 +6,7 @@ import { useAuth } from "./providers/AuthProvider";
 const MENUS = [
   { href: "/agent/rag", label: "rag chat", perm: "page:/agent/rag" },
   { href: "/agent/langchain", label: "langchain chat", perm: "page:/agent/langchain" },
+  { href: '/agent/graphChat', label: 'agent graph chat', perm: "page:/agent/graphChat" }
 ];
 
 export default function Home() {

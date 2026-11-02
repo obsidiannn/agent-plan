@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.types import Command, interrupt
 from langchain_core.messages import HumanMessage
-from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.checkpoint.memory import MemorySaver
 
 load_dotenv()
 
@@ -46,7 +46,7 @@ builder.add_edge("approval", "execute")
 builder.add_edge("execute", END)
 
 # 使用 checkpointer 编译图
-checkpointer = PostgresSaver()
+checkpointer = MemorySaver()
 graph = builder.compile(checkpointer=checkpointer)
 
 # 每次对话使用唯一 thread_id

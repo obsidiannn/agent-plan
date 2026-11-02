@@ -6,6 +6,7 @@ from server.schemas import requests
 
 from server.core import langchain as agent_core  # langchain 版 agent 实例
 from server.core import chroma_rag as chroma_core  # RAG 版 agent(Chroma 检索)
+from server.core import langgraph as graph_core  # 人工审批工作流(检查点落 PostgreSQL)
 from server.core.deps import require_auth
 import uuid
 
@@ -66,3 +67,24 @@ async def analyze_stream(request: requests.AnalyzeRequest):
             yield {"event": "error", "data": json.dumps({"message": str(e)})}
 
     return EventSourceResponse(event_generator())
+
+
+@router.post("/agent/graphChat")
+async def graph_start(request: requests.AnalyzeRequest):
+    """提交审批请求: 图跑到 approval 节点会 interrupt 挂起。
+
+    返回 { conversation_id, status, pending, messages }:
+    - status = interrupted 时 pending 为待审批内容, 前端据此弹出审批按钮
+    - 恢复执行请用同一个 conversation_id 调 /agent/graph/resume
+    """
+    conversation_id = request.conversation_id or f"conv_{uuid.uuid4().hex}"
+    return await graph_core.start(conversation_id, request.prompt)
+
+
+@router.post("/agent/graph/resume")
+async def graph_resume(request: requests.GraphDecisionRequest):
+    """人工审批后恢复执行: decision = approve 放行 / reject 拒绝。
+
+    恢复后可能再次挂起(返回 interrupted), 也可能跑完(返回 finished), 由前端按 status 判断。
+    """
+    return await graph_core.resume(request.conversation_id, request.decision)
