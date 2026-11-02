@@ -5,11 +5,37 @@ import json
 from server.schemas import requests
 
 from server.core import langchain as agent_core  # langchain 版 agent 实例
+from server.core import chroma_rag as chroma_core  # RAG 版 agent(Chroma 检索)
 from server.core.deps import require_auth
 import uuid
 
 router = APIRouter(
     prefix="/api", tags=["agent"], dependencies=[Depends(require_auth)])
+
+
+@router.post("/agent/chroma")
+async def chroma_stream(request: requests.AnalyzeRequest):
+    """RAG 问答(Chroma 检索 + LLM 流式作答), 以 SSE 流式返回。
+
+    事件协议与 /agent/chatline 一致, 前端可直接复用:
+    - conversation: 首个事件, 回传后端会话 ID(前端未传时)
+    - on_chat_model_stream: 增量文本, data.content 为本次新增片段
+    - error: 生成失败时的错误信息
+    """
+    conversation_id = request.conversation_id or f"conv_{uuid.uuid4().hex}"
+
+    async def event_generator():
+        yield {"event": "conversation", "data": json.dumps({"conversation_id": conversation_id})}
+        try:
+            async for text in chroma_core.astream_answer(conversation_id, request.prompt):
+                yield {
+                    "event": "on_chat_model_stream",
+                    "data": json.dumps({"node": "chroma-rag", "content": text}),
+                }
+        except Exception as e:
+            yield {"event": "error", "data": json.dumps({"message": str(e)})}
+
+    return EventSourceResponse(event_generator())
 
 
 @router.post("/agent/chatline")

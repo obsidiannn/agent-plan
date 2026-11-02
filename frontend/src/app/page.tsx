@@ -5,6 +5,7 @@ import { useAuth } from "./providers/AuthProvider";
 /** 菜单项与对应的页面权限码 */
 const MENUS = [
   { href: "/agent/rag", label: "rag chat", perm: "page:/agent/rag" },
+  { href: "/agent/langchain", label: "langchain chat", perm: "page:/agent/langchain" },
 ];
 
 export default function Home() {

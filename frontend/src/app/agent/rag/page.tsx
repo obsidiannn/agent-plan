@@ -1,10 +1,9 @@
-
+'use client'
+import RagChatPanel from "@/app/components/window/ragChat"
 
 const RagChat = () => {
     return (
-        <div>
-            <h1>Rag Chat</h1>
-        </div>
+        <RagChatPanel />
     )
 }
 

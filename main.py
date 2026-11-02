@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from server.config import CORS_ORIGINS
 from server.core import auth
-from server.routers import auth as auth_router, strategy as strategy_router, data as data_router, agent as agent_router
+from server.routers import auth as auth_router, agent as agent_router
 
 app = FastAPI(title="server")
 
@@ -27,8 +27,6 @@ def handle_api_error(request: Request, exc: auth.ApiError):
 
 
 app.include_router(auth_router.router)
-app.include_router(strategy_router.router)
-app.include_router(data_router.router)
 app.include_router(agent_router.router)
 
 
