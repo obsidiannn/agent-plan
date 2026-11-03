@@ -189,3 +189,26 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+graph = StateGraph(State)
+graph.add_node("plan", plan_node)
+graph.add_node("fetch", fetch_node)
+graph.add_node("clean", clean_node)
+graph.add_node("classify", classify_node)
+graph.add_node("emotion", emotion_node)
+graph.add_node("embed", embed_node)
+graph.add_node("store", store_node)
+graph.add_node("validate", validate_node)
+
+graph.add_edge(START, "plan")
+graph.add_edge("plan", "fetch")
+graph.add_edge("fetch", "clean")
+graph.add_edge("clean", "classify")
+graph.add_edge("classify", "emotion")
+graph.add_edge("emotion", "embed")
+graph.add_edge("embed", "store")
+graph.add_edge("store", "validate")
+graph.add_conditional_edges(
+    "validate",
+    route_after_validate,
+    {END: END, "fetch": "fetch"},
+)

@@ -14,7 +14,6 @@ interrupt 不会阻塞进程: 它让本次调用在审批节点处返回并把�
 会话检查点与 langchain agent 共用同一批表, 因此每次调用都在 metadata 里打上
 agent=graphChat 标签, 历史列表按该标签过滤, 避免混入其它 agent 的会话。
 """
-import asyncio
 
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.types import Command, interrupt
