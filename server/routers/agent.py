@@ -1,11 +1,14 @@
 from fastapi import APIRouter, Depends, Request
 from sse_starlette.sse import EventSourceResponse
+import asyncio
 import json
 from server.schemas import requests
 
 from server.core import langchain as agent_core  # langchain 版 agent 实例
 from server.core import chroma_rag as chroma_core  # RAG 版 agent(Chroma 检索)
-from server.core import langgraph as graph_core  # 人工审批工作流(检查点落 PostgreSQL)
+from server.core import claw_chat as claw_chat_core  # 股吧舆情对话(Chroma 检索 + 立场统计)
+# 人工审批工作流(检查点落 PostgreSQL)
+from server.core import langgraph_agent as graph_core
 from server.core.deps import require_auth
 import uuid
 
@@ -99,3 +102,41 @@ async def graph_sessions():
 async def graph_history(conversation_id: str):
     """按 conversation_id 读取某个历史会话的完整消息与挂起状态"""
     return await graph_core.history(conversation_id)
+
+
+@router.post("/agent/clawChat")
+async def claw_chat_stream(request: requests.ClawChatRequest):
+    """股吧舆情问答: 检索已入库帖子 + 立场统计, 以 SSE 流式返回。
+
+    claw_param 可把问答限定在某个采集参数(如股票代码)的帖子上, 不传表示全库。
+    事件协议:
+    - conversation: 首个事件, 回传后端会话 ID
+    - stats: 立场分布(看多/看空/中性)与 total, 前端右侧面板使用
+    - sources: 本轮命中的帖子(标题/作者/时间/立场), 供来源核对
+    - on_chat_model_stream: 增量文本, data.content 为本次新增片段
+    - error: 生成失败或该参数下向量库为空时的提示
+    """
+    conversation_id = request.conversation_id or f"conv_{uuid.uuid4().hex}"
+
+    async def event_generator():
+        yield {"event": "conversation", "data": json.dumps({"conversation_id": conversation_id})}
+        try:
+            async for event in claw_chat_core.astream(
+                    conversation_id, request.prompt, request.claw_param):
+                yield event
+        except Exception as e:
+            yield {"event": "error", "data": json.dumps({"message": str(e)})}
+
+    return EventSourceResponse(event_generator())
+
+
+@router.get("/agent/claw/params")
+async def claw_params():
+    """可选采集参数(claw_task_detail.claw_param)及已入库条数, 供前端按票切换"""
+    return await asyncio.to_thread(claw_chat_core.list_params)
+
+
+@router.get("/agent/claw/overview")
+async def claw_overview(claw_param: str | None = None):
+    """立场分布, 供前端右侧面板首次加载; 传 claw_param 则只统计该参数"""
+    return await asyncio.to_thread(claw_chat_core.stance_overview, claw_param)

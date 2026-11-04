@@ -29,3 +29,9 @@ class GraphDecisionRequest(BaseModel):
         ..., description="待审批会话 ID，即 /agent/graph/start 返回的 conversation_id，映射到 thread_id")
     decision: Literal["approve",
                       "reject"] = Field(..., description="人工审批决定：approve 放行 / reject 拒绝")
+
+
+class ClawChatRequest(AnalyzeRequest):
+    """股吧舆情问答请求，在通用会话字段外增加采集参数过滤"""
+    claw_param: Optional[str] = Field(
+        None, description="按 claw_task_detail.claw_param 过滤(如股票代码 002526)；不传表示全库")

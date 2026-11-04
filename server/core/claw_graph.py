@@ -100,7 +100,9 @@ def clean_node(state: State) -> dict:
         if not item.get("title") or not url or url in seen:
             continue
         seen.add(url)
-        item["content"] = item["title"]
+        # 详情页正文优先, 抓不到时才退回标题, 避免把标题又塞回正文
+        if not item.get("content"):
+            item["content"] = item["title"]
         cleaned.append(item)
     logs.logger.info(f"[clean] 清洗去重后剩余 {len(cleaned)} 条")
     return {"items": cleaned}
@@ -184,6 +186,7 @@ def _metadata(item: PostItem) -> dict:
         "publish_time": item.get("publish_time", ""),
         "stance": item.get("stance", ""),
         "task_code": item.get("task_code", ""),
+        "claw_param": item.get("claw_param", ""),
         "read_count": item.get("read_count", ""),
         "comment_count": item.get("comment_count", ""),
     }

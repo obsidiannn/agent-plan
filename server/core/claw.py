@@ -19,6 +19,7 @@ from server.db.server_models import ClasTaskDetail, ClawTask
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 base_url = "https://guba.eastmoney.com/list,%s.html"
+detail_url = "https://guba.eastmoney.com/news,002777,1792015179.html"
 
 
 def load_targets() -> list[dict]:
@@ -56,8 +57,10 @@ class GubaListSpider(scrapy.Spider):
     name = "guba_list"
     custom_settings = {
         "ROBOTSTXT_OBEY": False,
-        "DOWNLOAD_DELAY": 1,
-        "CONCURRENT_REQUESTS_PER_DOMAIN": 2,
+        "DOWNLOAD_DELAY": 3,
+        "RANDOMIZE_DOWNLOAD_DELAY": True,
+        "CONCURRENT_REQUESTS": 1,
+        "CONCURRENT_REQUESTS_PER_DOMAIN": 1,
         "DEFAULT_REQUEST_HEADERS": {
             "User-Agent": (
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -87,7 +90,7 @@ class GubaListSpider(scrapy.Spider):
             link = row.css("div.title a")
             if not link:
                 continue
-            yield {
+            item = {
                 "task_code": target["task_code"],
                 "task_name": target["task_name"],
                 "claw_param": target["claw_param"],
@@ -97,7 +100,29 @@ class GubaListSpider(scrapy.Spider):
                 "read_count": row.css("div.read::text").get("").strip(),
                 "comment_count": row.css("div.reply::text").get("").strip(),
                 "publish_time": row.css("div.update::text").get("").strip(),
+                "content": "",
             }
+            # 列表页只有摘要, 继续跟进详情页抓取正文
+            yield scrapy.Request(
+                item["url"],
+                callback=self.parse_detail,
+                errback=self.detail_failed,
+                meta={"item": item},
+                dont_filter=True,
+            )
+
+    def parse_detail(self, response):
+        item = response.meta["item"]
+        text = response.css("div.newstext div.xeditor_content").xpath(
+            "string(.)").get() or ""
+        item["content"] = " ".join(text.split())
+        yield item
+
+    def detail_failed(self, failure):
+        """详情页抓取失败时, 退化为仅保留列表页字段, 避免整条数据丢失"""
+        item = failure.request.meta["item"]
+        logger.warning(f"详情页抓取失败, 仅保留列表字段: {item['url']}")
+        yield item
 
 
 def _crawl(targets: list[dict]) -> list[dict]:
