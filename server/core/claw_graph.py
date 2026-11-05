@@ -6,7 +6,7 @@
     Node    单一职责的工作单元
             plan   -> 从 claw_task / clas_task_detail 读取采集目标(claw.load_targets)
             fetch  -> 运行 Scrapy 爬虫采集条目(claw.collect)
-            stance -> 用 FinBERT 判定用户立场(看多/看空/中性)
+            stance -> 用 FinBERT 判定用户立场(积极/消极/中性)
             embed  -> 对(标题+立场+时间)做中文语义向量化
             store  -> 写入 Chroma 向量库并落元数据
             其余为清洗/分类/质检
@@ -25,6 +25,7 @@ from __future__ import annotations
 import os
 import threading
 from collections import Counter
+from datetime import datetime
 from typing import TypedDict
 
 import chromadb
@@ -58,7 +59,7 @@ class PostItem(TypedDict, total=False):
     content: str
     topic: str
     related: list[str]
-    stance: str                    # 用户立场: 看多/看空/中性(FinBERT 判定)
+    stance: str                    # 用户立场: 积极/消极/中性(FinBERT 判定)
     sentiment: dict[str, float]    # FinBERT 三分类概率
     doc_text: str                  # 实际进向量库的文本(标题+立场+时间)
     embedding: list[float]
@@ -67,6 +68,7 @@ class PostItem(TypedDict, total=False):
 
 class State(TypedDict):
     targets: list[dict]        # 待采集目标(库中任务 + 明细参数)
+    date: str                  # 只要该日期发布的帖子(YYYYMMDD, 空表示不过滤)
     retry: int                 # 当前重试次数
     items: list[PostItem]      # 采集到的条目
     ok: bool                   # 质检是否通过
@@ -74,8 +76,8 @@ class State(TypedDict):
 
 
 def plan_node(state: State) -> dict:
-    """从 claw_task / clas_task_detail 读取激活任务, 生成采集计划"""
-    targets = claw.load_targets()
+    """生成采集计划: 已显式传入目标时沿用(对话触发的定向采集), 否则读库中激活任务"""
+    targets = state.get("targets") or claw.load_targets()
     logs.logger.info(f"[plan] 生成采集计划, 共 {len(targets)} 个目标")
     return {"targets": targets, "retry": 0, "items": []}
 
@@ -91,20 +93,35 @@ def fetch_node(state: State) -> dict:
     return {"items": items, "retry": retry}
 
 
+def matches_date(publish_time: str, date: str) -> bool:
+    """判断帖子发布时间是否属于指定日期。
+
+    publish_time 形如 "11-04 01:35"(股吧不带年份), date 形如 "20261105" -> 比对 "11-05"。
+    date 为空或格式不对时不过滤。
+    """
+    if not date or len(date) != 8 or not date.isdigit():
+        return True
+    return str(publish_time).startswith(f"{date[4:6]}-{date[6:8]}")
+
+
 def clean_node(state: State) -> dict:
-    """数据清洗: 丢弃无标题条目, 按 URL 去重"""
+    """数据清洗: 丢弃无标题条目, 按 URL 去重, 并按需要过滤指定日期的帖子"""
+    date = state.get("date", "")
     seen: set[str] = set()
     cleaned: list[PostItem] = []
     for item in state.get("items", []):
         url = item.get("url")
         if not item.get("title") or not url or url in seen:
             continue
+        if not matches_date(item.get("publish_time", ""), date):
+            continue
         seen.add(url)
         # 详情页正文优先, 抓不到时才退回标题, 避免把标题又塞回正文
         if not item.get("content"):
             item["content"] = item["title"]
         cleaned.append(item)
-    logs.logger.info(f"[clean] 清洗去重后剩余 {len(cleaned)} 条")
+    scope = f"按日期 {date} 过滤后" if date else "清洗去重后"
+    logs.logger.info(f"[clean] {scope}剩余 {len(cleaned)} 条")
     return {"items": cleaned}
 
 
@@ -121,7 +138,7 @@ def classify_node(state: State) -> dict:
 
 
 def stance_node(state: State) -> dict:
-    """用 FinBERT 判定用户立场(看多/看空/中性)并给出三分类概率"""
+    """用 FinBERT 判定用户立场(积极/消极/中性)并给出三分类概率"""
     items = state["items"]
     if items:
         results = get_stance().classify(
@@ -189,6 +206,7 @@ def _metadata(item: PostItem) -> dict:
         "claw_param": item.get("claw_param", ""),
         "read_count": item.get("read_count", ""),
         "comment_count": item.get("comment_count", ""),
+        "crawled_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
 
 
@@ -224,6 +242,10 @@ def validate_node(state: State) -> dict:
 def route_after_validate(state: State) -> str:
     """条件边: 通过 -> END; 不通过且未超 MAX_RETRY -> fetch; 否则 -> END"""
     if state.get("ok"):
+        return graph.END
+    if state.get("date") and not state.get("items"):
+        # 按日期过滤后为空是确定性结果, 重抓同一页也不会变, 不重试
+        logs.logger.info("[route] 该日期无匹配帖子, 直接结束")
         return graph.END
     if state.get("retry", 0) >= MAX_RETRY:
         logs.logger.info(f"[route] 达到最大重试次数 {MAX_RETRY}, 终止")

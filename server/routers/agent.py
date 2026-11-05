@@ -111,7 +111,7 @@ async def claw_chat_stream(request: requests.ClawChatRequest):
     claw_param 可把问答限定在某个采集参数(如股票代码)的帖子上, 不传表示全库。
     事件协议:
     - conversation: 首个事件, 回传后端会话 ID
-    - stats: 立场分布(看多/看空/中性)与 total, 前端右侧面板使用
+    - stats: 立场分布(积极/消极/中性)与 total, 前端右侧面板使用
     - sources: 本轮命中的帖子(标题/作者/时间/立场), 供来源核对
     - on_chat_model_stream: 增量文本, data.content 为本次新增片段
     - error: 生成失败或该参数下向量库为空时的提示

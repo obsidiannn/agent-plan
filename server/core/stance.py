@@ -2,7 +2,7 @@
 """中文金融情感/立场判定: FinBERT(yiyanghkust/finbert-tone-chinese)
 
 在本地 CPU 上做 PyTorch 推理, 三分类结果映射为用户立场:
-    Positive -> 看多, Negative -> 看空, Neutral -> 中性
+    Positive -> 积极, Negative -> 消极, Neutral -> 中性
 
 模型约 400MB, 首次调用时从 HuggingFace 下载并缓存到 ~/.cache/finbert,
 之后直接复用本地目录, 不再联网。
@@ -22,7 +22,7 @@ MODEL_DIR = Path.home() / ".cache" / "finbert" / MODEL_REPO.split("/")[-1]
 MAX_LENGTH = 512
 
 # FinBERT 三分类标签 -> 用户立场
-LABEL_TO_STANCE = {"Positive": "看多", "Negative": "看空", "Neutral": "中性"}
+LABEL_TO_STANCE = {"Positive": "积极", "Negative": "消极", "Neutral": "中性"}
 
 
 class FinBertStance:
@@ -76,7 +76,7 @@ class FinBertStance:
         return results
 
     def classify(self, texts: list[str]) -> list[dict]:
-        """批量判定, 返回 [{"stance": 看多/看空/中性, "sentiment": {标签: 概率}}, ...]"""
+        """批量判定, 返回 [{"stance": 积极/消极/中性, "sentiment": {标签: 概率}}, ...]"""
         results: list[dict] = []
         for i in range(0, len(texts), self._batch_size):
             results.extend(self._classify_batch(texts[i:i + self._batch_size]))

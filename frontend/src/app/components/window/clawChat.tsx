@@ -33,7 +33,39 @@ interface Source {
   snippet: string
 }
 
-/** 立场配色: 沿用 A 股惯例, 看多红 / 看空绿 / 中性灰 */
+/** 采集意图(clawChat 的 intent 事件): 用户这句话是想拉数据还是一般提问 */
+interface CrawlIntent {
+  action: 'crawl' | 'qa'
+  claw_param: string | null
+  date: string | null
+}
+
+/** 采集流程中的单个节点进度(clawChat 的 progress 事件) */
+interface CrawlStep {
+  node: string
+  label: string
+  status: string
+  detail: string
+}
+
+/** 采集汇总(clawChat 的 crawl_result 事件) */
+interface CrawlSummary {
+  claw_param: string
+  date: string
+  fetched: number
+  stored: number
+  ok: boolean
+  reason: string
+  message: string
+}
+
+interface CrawlState {
+  active: boolean
+  steps: CrawlStep[]
+  summary: CrawlSummary | null
+}
+
+/** 立场配色: 积极红 / 消极绿 / 中性灰 */
 const STANCE_COLOR: Record<string, string> = {
   '积极': '#ef4444',
   '消极': '#22c55e',
@@ -52,6 +84,9 @@ const handleSseBlock = (
     onStats: (stats: StanceStats) => void
     onSources: (sources: Source[]) => void
     onConversationId: (id: string) => void
+    onIntent: (intent: CrawlIntent) => void
+    onProgress: (step: CrawlStep) => void
+    onCrawlResult: (summary: CrawlSummary) => void
   },
 ) => {
   let event = 'message'
@@ -76,6 +111,18 @@ const handleSseBlock = (
     total?: number
     stance?: Record<string, number>
     sources?: Source[]
+    // 采集相关事件(intent / progress / crawl_result)的字段
+    action?: 'crawl' | 'qa'
+    claw_param?: string | null
+    date?: string | null
+    node?: string
+    label?: string
+    status?: string
+    detail?: string
+    fetched?: number
+    stored?: number
+    ok?: boolean
+    reason?: string
   }
   if (data.conversation_id) {
     handlers.onConversationId(data.conversation_id)
@@ -88,6 +135,29 @@ const handleSseBlock = (
     if (data.content) {
       handlers.onChunk(data.content)
     }
+  } else if (event === 'intent') {
+    handlers.onIntent({
+      action: data.action ?? 'qa',
+      claw_param: data.claw_param ?? null,
+      date: data.date ?? null,
+    })
+  } else if (event === 'progress') {
+    handlers.onProgress({
+      node: data.node ?? '',
+      label: data.label ?? '',
+      status: data.status ?? '',
+      detail: data.detail ?? '',
+    })
+  } else if (event === 'crawl_result') {
+    handlers.onCrawlResult({
+      claw_param: data.claw_param ?? '',
+      date: data.date ?? '',
+      fetched: data.fetched ?? 0,
+      stored: data.stored ?? 0,
+      ok: Boolean(data.ok),
+      reason: data.reason ?? '',
+      message: data.message ?? '',
+    })
   } else if (event === 'error') {
     handlers.onChunk(`\n[错误] ${data.message ?? '未知错误'}\n`)
   }
@@ -107,6 +177,9 @@ const ClawChatPanel = () => {
   const [clawParam, setClawParam] = useState('')
   const [stats, setStats] = useState<StanceStats>({ total: 0, stance: {} })
   const [sources, setSources] = useState<Source[]>([])
+  // 对话触发的采集: 进度节点 + 汇总, 完成后据 refreshKey 刷新参数/分布
+  const [crawl, setCrawl] = useState<CrawlState>({ active: false, steps: [], summary: null })
+  const [refreshKey, setRefreshKey] = useState(0)
   const listRef = useRef<HTMLDivElement>(null)
   // 同一个参数内多轮复用同一会话 ID; 切参数时换新的, 上下文不跨票
   const conversationRef = useRef<string>(newConversationId())
@@ -114,17 +187,17 @@ const ClawChatPanel = () => {
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
-  }, [messages])
+  }, [messages, crawl])
 
-  // 可选参数清单(带已入库条数), 供按票区分
+  // 可选参数清单(带已入库条数), 供按票区分; 采集完成后刷新
   useEffect(() => {
     fetch('/api/agent/claw/params')
       .then(res => (res.ok ? res.json() : []))
       .then((data: ParamOption[]) => setParams(Array.isArray(data) ? data : []))
       .catch(() => { /* 后端未就绪时忽略 */ })
-  }, [])
+  }, [refreshKey])
 
-  // 立场分布跟随所选参数: 未选=全库, 选定=只统计该 code
+  // 立场分布跟随所选参数: 未选=全库, 选定=只统计该 code; 采集完成后刷新
   useEffect(() => {
     const query = clawParam ? `?claw_param=${encodeURIComponent(clawParam)}` : ''
     fetch(`/api/agent/claw/overview${query}`)
@@ -135,7 +208,7 @@ const ClawChatPanel = () => {
         }
       })
       .catch(() => { /* 忽略 */ })
-  }, [clawParam])
+  }, [clawParam, refreshKey])
 
   const switchParam = useCallback((value: string) => {
     if (value === clawParam) {
@@ -145,6 +218,7 @@ const ClawChatPanel = () => {
     setClawParam(value)
     setMessages([])
     setSources([])
+    setCrawl({ active: false, steps: [], summary: null })
     setStats({ total: 0, stance: {} })
   }, [clawParam])
 
@@ -166,6 +240,7 @@ const ClawChatPanel = () => {
     setInput('')
     setMessages(prev => [...prev, { role: 'user', content: text }, { role: 'assistant', content: '' }])
     setSources([])
+    setCrawl({ active: false, steps: [], summary: null })
     setStreaming(true)
 
     try {
@@ -202,6 +277,22 @@ const ClawChatPanel = () => {
             onStats: setStats,
             onSources: setSources,
             onConversationId: id => { conversationRef.current = id },
+            onIntent: intent => {
+              if (intent.action === 'crawl') {
+                setCrawl({ active: true, steps: [], summary: null })
+              }
+            },
+            onProgress: step => {
+              setCrawl(prev => ({ ...prev, active: true, steps: [...prev.steps, step] }))
+            },
+            onCrawlResult: summary => {
+              setCrawl(prev => ({ ...prev, active: false, summary }))
+              if (summary.message) {
+                appendToLast(`\n${summary.message}`)
+              }
+              // 采集可能新建参数或新增帖子, 刷新参数清单与立场分布
+              setRefreshKey(k => k + 1)
+            },
           })
         }
       }
@@ -244,12 +335,39 @@ const ClawChatPanel = () => {
               background: isUser ? '#3b82f6' : '#f1f5f9',
               color: isUser ? '#ffffff' : '#111111',
             }}>
-              {pending && !m.content ? <span style={{ color: '#94a3b8' }}>检索中...</span> : m.content}
+              {pending && !m.content ?
+                <span style={{ color: '#94a3b8' }}>{crawl.active ? '采集中...' : '检索中...'}</span> :
+                m.content}
             </div>
           })
         }
+        {
+          crawl.steps.length > 0 && <div style={{
+            alignSelf: 'flex-start',
+            maxWidth: '85%',
+            minWidth: 240,
+            border: '1px solid #e2e8f0',
+            borderRadius: 8,
+            padding: 10,
+            fontSize: 13,
+            background: '#f8fafc',
+          }}>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>
+              采集进度 {crawl.active ? '· 进行中' : (crawl.summary?.ok ? '· 完成' : '· 结束')}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {
+                crawl.steps.map((s, i) => <div key={`${s.node}-${i}`} style={{ display: 'flex', gap: 6 }}>
+                  <span style={{ color: '#22c55e' }}>✓</span>
+                  <span style={{ color: '#334155' }}>{s.label}</span>
+                  {s.detail && <span style={{ color: '#94a3b8' }}>· {s.detail}</span>}
+                </div>)
+              }
+            </div>
+          </div>
+        }
         {messages.length === 0 && <div style={{ fontSize: 13, color: '#94a3b8' }}>
-          试着问: &quot;最近大家对这个票的倾向如何?&quot; / &quot;有哪些看空的理由?&quot;
+          试着问: &quot;最近大家对这个票的倾向如何?&quot; 或 &quot;帮我拉取 002526 20261105 的数据&quot;
         </div>}
       </div>
       <div style={{ display: 'flex', gap: 8 }}>

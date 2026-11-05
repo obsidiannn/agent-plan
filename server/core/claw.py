@@ -5,6 +5,7 @@
 最终抓取地址 = base_url % claw_param
 """
 import json
+import random
 import subprocess
 import sys
 from pathlib import Path
@@ -12,6 +13,7 @@ from pathlib import Path
 import scrapy
 from scrapy import signals
 from scrapy.crawler import CrawlerProcess
+from sqlalchemy import func
 
 from server.core.logs import logger
 from server.db.server_engine import SessionLocal
@@ -20,6 +22,44 @@ from server.db.server_models import ClasTaskDetail, ClawTask
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 base_url = "https://guba.eastmoney.com/list,%s.html"
 detail_url = "https://guba.eastmoney.com/news,002777,1792015179.html"
+
+# 会话入口: 先访问首页建立 Cookie 会话, 再抓列表页
+HOME_URL = "https://guba.eastmoney.com/"
+
+# 浏览器指纹档案(UA 与其配套的 sec-ch-ua 字段必须一致), 每次会话固定其一
+UA_PROFILES = (
+    {
+        "ua": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "brands": ('"Chromium";v="124", "Google Chrome";v="124", '
+                   '"Not-A.Brand";v="99"'),
+        "platform": '"macOS"',
+    },
+    {
+        "ua": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+        ),
+        "brands": ('"Chromium";v="125", "Google Chrome";v="125", '
+                   '"Not-A.Brand";v="99"'),
+        "platform": '"Windows"',
+    },
+)
+
+# 补齐真实浏览器会带的请求头, 避免因指纹缺失被风控
+BROWSER_HEADERS = {
+    "Accept": ("text/html,application/xhtml+xml,application/xml;q=0.9,"
+               "image/avif,image/webp,*/*;q=0.8"),
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "same-origin",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
+    "Connection": "keep-alive",
+}
 
 
 def load_targets() -> list[dict]:
@@ -51,37 +91,95 @@ def load_targets() -> list[dict]:
         SessionLocal.remove()
 
 
+def ensure_target(claw_param: str) -> dict:
+    """确保该参数已存在于 clas_task_detail, 不存在就挂到激活任务下新建一条
+
+    返回结构同 load_targets 的元素, 可直接交给采集器使用。
+    """
+    session = SessionLocal()
+    try:
+        task = session.query(ClawTask).filter(
+            ClawTask.active.is_(True)).first()
+        if task is None:
+            raise ValueError("没有激活的采集任务, 无法新建参数明细")
+        detail = (
+            session.query(ClasTaskDetail)
+            .filter(ClasTaskDetail.claw_param == claw_param)
+            .first()
+        )
+        if detail is None:
+            # 该表由手工 DDL 创建, id 无自增序列, 需要自己取下一个值
+            next_id = (session.query(
+                func.max(ClasTaskDetail.id)).scalar() or 0) + 1
+            session.add(ClasTaskDetail(
+                id=next_id, task_id=task.id, claw_param=claw_param))
+            session.commit()
+            logger.info(
+                f"新建采集明细: id={next_id}, task_id={task.id}, claw_param={claw_param}")
+        return {
+            "task_code": task.task_code,
+            "task_name": task.task_name,
+            "claw_param": claw_param,
+            "url": base_url % claw_param,
+        }
+    finally:
+        SessionLocal.remove()
+
+
 class GubaListSpider(scrapy.Spider):
     """按库中任务配置抓取股吧列表页"""
 
     name = "guba_list"
     custom_settings = {
         "ROBOTSTXT_OBEY": False,
-        "DOWNLOAD_DELAY": 3,
-        "RANDOMIZE_DOWNLOAD_DELAY": True,
+        # 保守频率: 基础间隔 6s 上下浮动 50%, 单域并发 1
+        "DOWNLOAD_DELAY": 6,
+        "DOWNLOAD_DELAY_JITTER": 0.5,
         "CONCURRENT_REQUESTS": 1,
         "CONCURRENT_REQUESTS_PER_DOMAIN": 1,
-        "DEFAULT_REQUEST_HEADERS": {
-            "User-Agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-            ),
-            "Referer": "https://guba.eastmoney.com/",
-        },
+        "COOKIES_ENABLED": True,
     }
 
     def __init__(self, targets: list[dict] | None = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # 未显式传入目标时, 回退到从库里读取
         self.targets = targets if targets is not None else load_targets()
+        # 整个会话固定一套浏览器指纹, 避免 UA 频繁跳变反而更可疑
+        self.profile = random.choice(UA_PROFILES)
+
+    def _headers(self, referer: str | None = None) -> dict:
+        headers = dict(BROWSER_HEADERS)
+        headers["User-Agent"] = self.profile["ua"]
+        headers["sec-ch-ua"] = self.profile["brands"]
+        headers["sec-ch-ua-mobile"] = "?0"
+        headers["sec-ch-ua-platform"] = self.profile["platform"]
+        if referer:
+            headers["Referer"] = referer
+        return headers
+
+    def _request(self, url, callback, meta=None, referer=None, errback=None):
+        return scrapy.Request(
+            url,
+            callback=callback,
+            errback=errback,
+            meta=meta or {},
+            headers=self._headers(referer),
+            dont_filter=True,
+        )
 
     async def start(self):
+        # 先走一次首页建立 Cookie 会话, 再按目标抓列表页
+        yield self._request(HOME_URL, self.parse_home)
+
+    def parse_home(self, response):
+        if not response.text:
+            logger.warning("股吧首页未返回内容, 会话可能未建立")
         for target in self.targets:
-            yield scrapy.Request(
+            yield self._request(
                 target["url"],
-                callback=self.parse_list,
+                self.parse_list,
                 meta={"target": target},
-                dont_filter=True,
+                referer=HOME_URL,
             )
 
     def parse_list(self, response):
@@ -103,12 +201,12 @@ class GubaListSpider(scrapy.Spider):
                 "content": "",
             }
             # 列表页只有摘要, 继续跟进详情页抓取正文
-            yield scrapy.Request(
+            yield self._request(
                 item["url"],
-                callback=self.parse_detail,
-                errback=self.detail_failed,
+                self.parse_detail,
                 meta={"item": item},
-                dont_filter=True,
+                referer=response.url,
+                errback=self.detail_failed,
             )
 
     def parse_detail(self, response):
