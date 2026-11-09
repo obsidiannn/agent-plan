@@ -38,7 +38,7 @@ from server.core.chroma_rag import (
     ChineseOnnxEmbeddings,
     configure_proxy,
 )
-from server.core.stance import get_stance
+from server.core.stance import build_text, get_stance
 
 MAX_RETRY = 3
 # 股吧帖子的向量集合, 可用环境变量覆盖
@@ -141,8 +141,10 @@ def stance_node(state: State) -> dict:
     """用 FinBERT 判定用户立场(积极/消极/中性)并给出三分类概率"""
     items = state["items"]
     if items:
+        # 标题+正文一起送模型: 股吧标题常是"见鬼"这类无观点短句
         results = get_stance().classify(
-            [it.get("title", "") for it in items])
+            [build_text(it.get("title", ""), it.get("content", ""))
+             for it in items])
         for item, res in zip(items, results):
             item["stance"] = res["stance"]
             item["sentiment"] = res["sentiment"]
@@ -198,6 +200,8 @@ def _metadata(item: PostItem) -> dict:
     """写入 Chroma 的元数据(值只允许 str/int/float/bool)"""
     return {
         "title": item.get("title", ""),
+        # 正文一并落库: 立场判定与评测都要用, 且便于溯源核对
+        "content": item.get("content", ""),
         "url": item.get("url", ""),
         "author": item.get("author", ""),
         "publish_time": item.get("publish_time", ""),
