@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import asyncio
+from gc import callbacks
 import json
 import os
 import threading
@@ -321,7 +322,8 @@ model = ChatOpenAI(
     model="deepseek-flash",
     api_key=os.environ["OPENAI_API_KEY"],
     base_url=os.environ["OPENAI_BASE_URL"],
-    max_tokens=1024,
+    max_tokens=512,
+    timeout=30
 )
 
 agent = create_agent(
@@ -358,6 +360,7 @@ async def astream(conversation_id: str, question: str,
     config = {
         "configurable": {"thread_id": conversation_id},
         "metadata": {"agent": AGENT_NAME},
+        "recursion_limit": 5,
     }
     async for mode, chunk in agent.astream(
         {"messages": [{"role": "user", "content": question}]},
