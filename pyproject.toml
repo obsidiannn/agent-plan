@@ -31,4 +31,5 @@ dependencies = [
     "scrapy>=2.19.0",
     "torch>=2.15.0",
     "transformers>=5.22.1",
+    "mcp[cli]>=2.3.0",
 ]

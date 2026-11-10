@@ -12,13 +12,16 @@ from server.config import CORS_ORIGINS
 from server.core import auth
 from server.db.agent_checkpoint import init_agent_checkpoint_tables
 from server.routers import auth as auth_router, agent as agent_router
+from server.mcp import demo as mcp_demo
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 启动时确保 LangGraph 检查点表存在(幂等), 供人工审批工作流落库
     init_agent_checkpoint_tables()
-    yield
+    # mount 不会触发子应用 lifespan, 需手动启动 MCP 的 StreamableHTTP 会话管理器
+    async with mcp_demo.mcp.session_manager.run():
+        yield
 
 
 app = FastAPI(title="server", lifespan=lifespan)
@@ -39,6 +42,7 @@ def handle_api_error(request: Request, exc: auth.ApiError):
 
 app.include_router(auth_router.router)
 app.include_router(agent_router.router)
+app.mount("/mcp", mcp_demo.app)
 
 
 @app.get("/")

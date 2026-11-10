@@ -7,6 +7,8 @@ from server.schemas import requests
 from server.core import langchain as agent_core  # langchain 版 agent 实例
 from server.core import chroma_rag as chroma_core  # RAG 版 agent(Chroma 检索)
 from server.core import claw_chat as claw_chat_core  # 股吧舆情对话(Chroma 检索 + 立场统计)
+# 股吧能力的实现层(MCP 工具/资源共用), 供参数清单与立场分布查询
+from server.mcp.claw import service as claw_service
 # 人工审批工作流(检查点落 PostgreSQL)
 from server.core import langgraph_agent as graph_core
 from server.core.deps import require_auth
@@ -133,10 +135,10 @@ async def claw_chat_stream(request: requests.ClawChatRequest):
 @router.get("/agent/claw/params")
 async def claw_params():
     """可选采集参数(claw_task_detail.claw_param)及已入库条数, 供前端按票切换"""
-    return await asyncio.to_thread(claw_chat_core.list_params)
+    return await asyncio.to_thread(claw_service.list_params)
 
 
 @router.get("/agent/claw/overview")
 async def claw_overview(claw_param: str | None = None):
     """立场分布, 供前端右侧面板首次加载; 传 claw_param 则只统计该参数"""
-    return await asyncio.to_thread(claw_chat_core.stance_overview, claw_param)
+    return await asyncio.to_thread(claw_service.stance_overview, claw_param)
