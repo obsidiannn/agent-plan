@@ -11,6 +11,7 @@ from server.core import claw_chat as claw_chat_core  # 股吧舆情对话(Chroma
 from server.mcp.claw import service as claw_service
 # 人工审批工作流(检查点落 PostgreSQL)
 from server.core import langgraph_agent as graph_core
+from server.core.auth import SessionUser
 from server.core.deps import require_auth
 import uuid
 
@@ -107,7 +108,8 @@ async def graph_history(conversation_id: str):
 
 
 @router.post("/agent/clawChat")
-async def claw_chat_stream(request: requests.ClawChatRequest):
+async def claw_chat_stream(request: requests.ClawChatRequest,
+                           session: SessionUser = Depends(require_auth)):
     """股吧舆情问答: 检索已入库帖子 + 立场统计, 以 SSE 流式返回。
 
     claw_param 可把问答限定在某个采集参数(如股票代码)的帖子上, 不传表示全库。
@@ -124,7 +126,7 @@ async def claw_chat_stream(request: requests.ClawChatRequest):
         yield {"event": "conversation", "data": json.dumps({"conversation_id": conversation_id})}
         try:
             async for event in claw_chat_core.astream(
-                    conversation_id, request.prompt, request.claw_param):
+                    conversation_id, request.prompt, request.claw_param, session):
                 yield event
         except Exception as e:
             yield {"event": "error", "data": json.dumps({"message": str(e)})}
@@ -133,12 +135,13 @@ async def claw_chat_stream(request: requests.ClawChatRequest):
 
 
 @router.get("/agent/claw/params")
-async def claw_params():
+async def claw_params(session: SessionUser = Depends(require_auth)):
     """可选采集参数(claw_task_detail.claw_param)及已入库条数, 供前端按票切换"""
     return await asyncio.to_thread(claw_service.list_params)
 
 
 @router.get("/agent/claw/overview")
-async def claw_overview(claw_param: str | None = None):
+async def claw_overview(claw_param: str | None = None,
+                        session: SessionUser = Depends(require_auth)):
     """立场分布, 供前端右侧面板首次加载; 传 claw_param 则只统计该参数"""
     return await asyncio.to_thread(claw_service.stance_overview, claw_param)

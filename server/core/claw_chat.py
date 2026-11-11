@@ -23,7 +23,9 @@ from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 
 import server.config  # noqa: F401  加载 server/.env
+from server.core.auth import SessionUser
 from server.db.agent_checkpoint import checkpointer
+from server.mcp.auth import require_tool_permission
 from server.mcp.claw import service
 from server.mcp.demo import mcp as claw_mcp
 
@@ -48,8 +50,9 @@ SYSTEM_PROMPT = (
 
 @dataclass
 class ClawContext:
-    """随请求传入的运行时上下文: 前端当前选中的采集参数(如股票代码)"""
+    """随请求传入的运行时上下文: 前端当前选中的采集参数(如股票代码)与登录用户"""
     claw_param: str | None = None
+    user: SessionUser | None = None
 
 
 def _ctx_param(runtime: ToolRuntime[ClawContext]) -> str | None:
@@ -65,12 +68,21 @@ def _forward(runtime: ToolRuntime[ClawContext], event: dict) -> None:
         writer(event)
 
 
-async def _call_tool(name: str, arguments: dict) -> str:
+def _ctx_user(runtime: ToolRuntime[ClawContext]) -> SessionUser | None:
+    """当前请求的登录用户; 进程内调 MCP 工具时用它做鉴权"""
+    context = getattr(runtime, "context", None)
+    return getattr(context, "user", None) if context else None
+
+
+async def _call_tool(name: str, arguments: dict,
+                     runtime: ToolRuntime[ClawContext]) -> str:
     """进程内调用已注册的 MCP 工具, 返回文本结果
 
     采集进度等副作用由 MCP 工具经 service.emit_progress 实时回传,
     这里只负责把最终文本交回模型。
+    进程内调用不经过 MCP 的 middleware, 所以权限在这里补一次。
     """
+    require_tool_permission(_ctx_user(runtime), name)
     try:
         result = await claw_mcp.call_tool(name, arguments)
     except Exception as exc:  # 参数校验失败 / 工具内部报错都交回模型
@@ -93,7 +105,7 @@ async def search_posts(query: str, runtime: ToolRuntime[ClawContext]) -> str:
     text = await _call_tool("search_posts", {
         "query": query,
         "claw_param": _ctx_param(runtime) or "",
-    })
+    }, runtime)
     try:
         payload = json.loads(text)
     except json.JSONDecodeError:
@@ -119,7 +131,7 @@ async def get_data_info(runtime: ToolRuntime[ClawContext], claw_param: str = "")
     """
     return await _call_tool("get_data_info", {
         "claw_param": claw_param or _ctx_param(runtime) or "",
-    })
+    }, runtime)
 
 
 @tool
@@ -146,7 +158,7 @@ async def crawl_guba(runtime: ToolRuntime[ClawContext],
         return await _call_tool("crawl_guba", {
             "claw_param": claw_param,
             "date": date,
-        })
+        }, runtime)
 
 
 model = ChatOpenAI(
@@ -179,15 +191,17 @@ def _text_of(message) -> str:
 
 
 async def astream(conversation_id: str, question: str,
-                  claw_param: str | None = None) -> AsyncIterator[dict]:
+                  claw_param: str | None = None,
+                  user: SessionUser | None = None) -> AsyncIterator[dict]:
     """驱动 tool-calling Agent, 产出 SSE 事件体 {"event": 事件名, "data": JSON 字符串}
 
     - custom 流: 工具内推的自定义事件(intent/progress/crawl_result/stats/sources), 原样透传
     - messages 流: 模型增量文本, 统一包成 on_chat_model_stream(工具调用阶段的空内容不推)
 
     claw_param 用于把问答限定在某个采集参数(如股票代码)的帖子上, 不传表示全库。
+    user 是当前登录用户, 进程内调 MCP 工具时据此校验权限。
     """
-    context = ClawContext(claw_param=claw_param)
+    context = ClawContext(claw_param=claw_param, user=user)
     config = {
         "configurable": {"thread_id": conversation_id},
         "metadata": {"agent": AGENT_NAME},

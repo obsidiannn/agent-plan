@@ -1,6 +1,7 @@
 from mcp.server import MCPServer
 
 from . import claw
+from .auth import MCPPermissionMiddleware
 from .notes import prompts, resources, tools
 
 
@@ -10,8 +11,9 @@ def create_mcp() -> MCPServer:
     新增领域时：建 server/mcp/<domain>/{tools,resources}.py，
     各自暴露 register(mcp)，再在这里追加一行注册即可。
     claw 领域对外暴露股吧检索/统计/采集工具与 claw:// 资源。
+    能力鉴权统一挂在 middleware 上, 复用 sys_permission 的 RBAC。
     """
-    server = MCPServer("agent-plan")
+    server = MCPServer("agent-plan", middleware=[MCPPermissionMiddleware()])
     tools.register(server)
     resources.register(server)
     prompts.register(server)

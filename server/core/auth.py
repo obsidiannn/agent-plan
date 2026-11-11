@@ -111,4 +111,14 @@ def api_perm_code(method: str, pathname: str) -> str:
 def has_permission(session: Optional[SessionUser], code: str) -> bool:
     if not session:
         return False
-    return "*" in session.perms or code in session.perms
+    if "*" in session.perms or code in session.perms:
+        return True
+    # MCP 权限码支持逐级通配: mcp:claw:* 覆盖 mcp:claw:crawl_guba,
+    # mcp:notes:* 也覆盖 mcp:notes:res:server;
+    # page:/api: 仍然只认精确匹配, 避免 page:* 这种意外的放大
+    if code.startswith("mcp:"):
+        parts = code.split(":")
+        for i in range(len(parts) - 1, 1, -1):
+            if ":".join(parts[:i]) + ":*" in session.perms:
+                return True
+    return False
