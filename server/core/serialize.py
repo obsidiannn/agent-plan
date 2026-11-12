@@ -22,7 +22,6 @@ def serialize(obj):
         return obj.isoformat()
     if isinstance(obj, (bytes, bytearray)):
         # 兼容驱动返回 bytes 的情况（如 BIT 类型）
-         # pymysql 的 BIT(1) 返回 bytes
         try:
             return bool(int.from_bytes(obj, "little"))
         except Exception:

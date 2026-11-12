@@ -1,35 +1,28 @@
 # coding: utf-8
-""" 库 RBAC 模型: 用户 / 角色 / 权限
+"""库模型: RBAC(用户/角色/权限) + LangGraph 检查点 + 股吧采集任务
 
-表: sys_user, sys_role, sys_user_role, sys_permission, sys_role_permission
+表: sys_user, sys_role, sys_user_role, sys_permission, sys_role_permission,
+    agent_checkpoint, agent_checkpoint_blob, agent_checkpoint_write,
+    clas_task_detail, claw_task
+
+统一使用 SQLAlchemy 通用类型(不依赖任何数据库方言), 当前引擎是 PostgreSQL。
 """
+from datetime import datetime
+from typing import Any, Optional
+
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     Column,
     DateTime,
     ForeignKey,
     Integer,
+    LargeBinary,
+    PrimaryKeyConstraint,
     String,
     UniqueConstraint,
 )
-from sqlalchemy.orm import declarative_base, relationship
-
-from typing import Any, Optional
-import decimal
-
-from sqlalchemy import (
-    DateTime,
-    BigInteger, Column, DECIMAL, Float, Index, Integer, String, Enum as SQLEnum,
-)
-from sqlalchemy.dialects.mysql import VARCHAR
-from sqlalchemy.ext.declarative import declarative_base
-
-from sqlalchemy import BigInteger, Boolean, DECIMAL, DateTime, Float, Index, Integer, PrimaryKeyConstraint, String
-from sqlalchemy.dialects.mysql import VARCHAR, ENUM
-from sqlalchemy import LargeBinary
-from sqlalchemy.orm import Mapped, mapped_column
-
-from datetime import datetime
+from sqlalchemy.orm import Mapped, declarative_base, mapped_column, relationship
 
 Base = declarative_base()
 
@@ -122,17 +115,17 @@ class AgentCheckpoint(Base):
     __tablename__ = 'agent_checkpoint'
 
     thread_id: Mapped[str] = mapped_column(
-        VARCHAR(128), primary_key=True, comment='会话 ID(thread_id)')
+        String(128), primary_key=True, comment='会话 ID(thread_id)')
     checkpoint_ns: Mapped[str] = mapped_column(
-        VARCHAR(255), primary_key=True, default='', comment='检查点命名空间')
+        String(255), primary_key=True, default='', comment='检查点命名空间')
     checkpoint_id: Mapped[str] = mapped_column(
-        VARCHAR(64), primary_key=True, comment='检查点 ID(uuid6, 单调递增)')
+        String(64), primary_key=True, comment='检查点 ID(uuid6, 单调递增)')
     parent_checkpoint_id: Mapped[Optional[str]] = mapped_column(
-        VARCHAR(64), comment='父检查点 ID')
-    serde_type: Mapped[str] = mapped_column(VARCHAR(32), comment='序列化类型')
+        String(64), comment='父检查点 ID')
+    serde_type: Mapped[str] = mapped_column(String(32), comment='序列化类型')
     checkpoint_data: Mapped[bytes] = mapped_column(
         LargeBinary, comment='检查点数据')
-    metadata_type: Mapped[str] = mapped_column(VARCHAR(32), comment='元数据序列化类型')
+    metadata_type: Mapped[str] = mapped_column(String(32), comment='元数据序列化类型')
     metadata_data: Mapped[bytes] = mapped_column(
         LargeBinary, comment='元数据(来源/步数/父节点等)')
     create_time: Mapped[Optional[Any]] = mapped_column(
@@ -143,15 +136,15 @@ class AgentCheckpointBlob(Base):
     """检查点通道值: 一个检查点的某个通道在某个版本下的值"""
     __tablename__ = 'agent_checkpoint_blob'
 
-    thread_id: Mapped[str] = mapped_column(VARCHAR(128), primary_key=True)
+    thread_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     checkpoint_ns: Mapped[str] = mapped_column(
-        VARCHAR(255), primary_key=True, default='')
+        String(255), primary_key=True, default='')
     channel: Mapped[str] = mapped_column(
-        VARCHAR(255), primary_key=True, comment='通道名, 如 messages')
+        String(255), primary_key=True, comment='通道名, 如 messages')
     channel_version: Mapped[str] = mapped_column(
-        VARCHAR(64), primary_key=True, comment='通道版本')
+        String(64), primary_key=True, comment='通道版本')
     serde_type: Mapped[str] = mapped_column(
-        VARCHAR(32), comment='序列化类型, empty 表示该通道本次无值')
+        String(32), comment='序列化类型, empty 表示该通道本次无值')
     blob_data: Mapped[bytes] = mapped_column(LargeBinary, comment='通道值数据')
     create_time: Mapped[Optional[Any]] = mapped_column(
         DateTime, default=datetime.now)
@@ -161,19 +154,19 @@ class AgentCheckpointWrite(Base):
     """检查点待写入项: 单个任务(节点)在某个超级步对通道的写入"""
     __tablename__ = 'agent_checkpoint_write'
 
-    thread_id: Mapped[str] = mapped_column(VARCHAR(128), primary_key=True)
+    thread_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     checkpoint_ns: Mapped[str] = mapped_column(
-        VARCHAR(255), primary_key=True, default='')
-    checkpoint_id: Mapped[str] = mapped_column(VARCHAR(64), primary_key=True)
+        String(255), primary_key=True, default='')
+    checkpoint_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     task_id: Mapped[str] = mapped_column(
-        VARCHAR(128), primary_key=True, comment='任务 ID')
+        String(128), primary_key=True, comment='任务 ID')
     write_idx: Mapped[int] = mapped_column(
         Integer, primary_key=True, comment='写入序号, 特殊通道为负')
-    channel: Mapped[str] = mapped_column(VARCHAR(255), comment='通道名')
-    serde_type: Mapped[str] = mapped_column(VARCHAR(32), comment='序列化类型')
+    channel: Mapped[str] = mapped_column(String(255), comment='通道名')
+    serde_type: Mapped[str] = mapped_column(String(32), comment='序列化类型')
     blob_data: Mapped[bytes] = mapped_column(LargeBinary, comment='写入值数据')
     task_path: Mapped[Optional[str]] = mapped_column(
-        VARCHAR(512), comment='任务路径, 用于还原写入顺序')
+        String(512), comment='任务路径, 用于还原写入顺序')
     create_time: Mapped[Optional[Any]] = mapped_column(
         DateTime, default=datetime.now)
 
