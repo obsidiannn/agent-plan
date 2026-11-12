@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sse_starlette.sse import EventSourceResponse
 import asyncio
 import json
@@ -18,14 +18,27 @@ import uuid
 router = APIRouter(
     prefix="/api", tags=["agent"], )
 
+# 知识库上传限制: 单个 txt 最大 5MB
+MAX_RAG_UPLOAD_BYTES = 5 * 1024 * 1024
+
+
+def _decode_upload(raw: bytes) -> str:
+    """txt 解码: 优先 UTF-8(兼容 BOM), 失败再按 GBK 处理"""
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return raw.decode("gbk", errors="replace")
+
 
 @router.post("/agent/chroma")
-async def chroma_stream(request: requests.AnalyzeRequest):
-    """RAG 问答(Chroma 检索 + LLM 流式作答), 以 SSE 流式返回。
+async def chroma_stream(request: requests.RagChatRequest):
+    """RAG 知识库问答(Chroma 检索 + LLM 流式作答), 以 SSE 流式返回。
 
+    document 为侧边栏选中的文档名, 传了就只在该文档内检索; 不传表示全库。
     事件协议与 /agent/chatline 一致, 前端可直接复用:
     - conversation: 首个事件, 回传后端会话 ID(前端未传时)
     - on_chat_model_stream: 增量文本, data.content 为本次新增片段
+    - sources: 本轮命中的文档片段(文档名 + 段落序号 + 摘要), 供前端标注引用
     - error: 生成失败时的错误信息
     """
     conversation_id = request.conversation_id or f"conv_{uuid.uuid4().hex}"
@@ -33,15 +46,59 @@ async def chroma_stream(request: requests.AnalyzeRequest):
     async def event_generator():
         yield {"event": "conversation", "data": json.dumps({"conversation_id": conversation_id})}
         try:
-            async for text in chroma_core.astream_answer(conversation_id, request.prompt):
-                yield {
-                    "event": "on_chat_model_stream",
-                    "data": json.dumps({"node": "chroma-rag", "content": text}),
-                }
+            async for event in chroma_core.astream(
+                    conversation_id, request.prompt, request.document):
+                yield event
         except Exception as e:
             yield {"event": "error", "data": json.dumps({"message": str(e)})}
 
     return EventSourceResponse(event_generator())
+
+
+@router.get("/agent/chroma/documents")
+async def chroma_documents():
+    """侧边栏文档清单: 已录入 Chroma 的文档(文件名 / 切片数 / 字数 / 导入时间)"""
+    return {"documents": await chroma_core.list_all_documents()}
+
+
+@router.post("/agent/chroma/upload")
+async def chroma_upload(file: UploadFile = File(...),
+                        filename: str = Form("")):
+    """上传 txt 并拆词写入 Chroma(同名文件覆盖旧内容)。
+
+    - file: 选择的 txt 文件
+    - filename: 文档名, 留空则用文件名; 必须为 .txt
+    """
+    name = (filename or file.filename or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="请填写文件名称")
+    if not name.lower().endswith(".txt"):
+        raise HTTPException(status_code=400, detail="仅支持 txt 文件")
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="文件内容为空")
+    if len(raw) > MAX_RAG_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="文件过大, 最大支持 5MB")
+
+    text = _decode_upload(raw)
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="文件内容为空")
+
+    try:
+        document = await chroma_core.ingest_document(name, text)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    return {"ok": True, "document": document}
+
+
+@router.delete("/agent/chroma/documents/{filename}")
+async def chroma_delete_document(filename: str):
+    """删除整篇文档(按文档名清理该文档的全部切片)"""
+    if not filename.strip():
+        raise HTTPException(status_code=400, detail="文档名不能为空")
+    return await chroma_core.delete_document(filename)
 
 
 @router.post("/agent/chatline")

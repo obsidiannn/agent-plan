@@ -1,235 +1,231 @@
 # coding: utf-8
-"""RAG 对话(LangChain + ChromaDB), 供路由 /api/agent/chroma 使用
+"""RAG 文档问答 Agent(路由 /api/agent/chroma 使用)
 
-由 demo/rag/chroma_rag.py 的命令行版本改造而来:
-- 命令行 input() 循环  ->  FastAPI 路由 + SSE 流式响应
-- 单进程列表存历史     ->  按 conversation_id 分桶的进程内历史(演示用)
+知识库能力(检索 / 清单 / 拆词导入)已注册为 MCP 能力:
+- 工具: server/mcp/chroma_rag/tools.py
+  (search_documents / list_documents / get_document_info / ingest_document)
+- 资源: server/mcp/chroma_rag/resources.py(rag://documents)
 
-流程: 文档切分 -> 向量化(Embedding) -> 写入 Chroma -> 相似度检索 -> LLM 流式作答
+本模块只保留 Agent 适配层: 由模型决定调哪个工具, 进程内调用 MCP 工具后
+把结果转成前端 SSE 事件(sources 等), 对话记忆落 PostgreSQL, 由 thread_id 区分会话。
+
+上下文切换: 前端选中某篇文档时传 document, 工具会自动把检索范围限定在该文档;
+thread_id 也带上文档名, 即使前端漏传新的 conversation_id, 不同文档的对话也不会串。
 """
 from __future__ import annotations
 
 import asyncio
+import json
 import os
-import threading
-from pathlib import Path
+from dataclasses import dataclass
+from typing import AsyncIterator
 
-import chromadb
-import numpy as np
-import onnxruntime as ort
-from huggingface_hub import hf_hub_download
-from langchain_chroma import Chroma
-from langchain_core.documents import Document
-from langchain_core.embeddings import Embeddings
-from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain.agents import create_agent
+from langchain.tools import ToolRuntime
+from langchain_core.messages import AIMessageChunk
+from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from tokenizers import Tokenizer
 
 import server.config  # noqa: F401  加载 server/.env
-
-CHROMA_HOST = os.environ.get("CHROMA_HOST", "localhost")
-CHROMA_PORT = int(os.environ.get("CHROMA_PORT", "8000"))
-COLLECTION_NAME = os.environ.get("RAG_COLLECTION", "rag-demo")
-# 换知识库后置 RAG_REBUILD=true 重建一次索引; 之后保持 false 复用服务端集合
-REBUILD = os.environ.get("RAG_REBUILD", "false").lower() == "true"
-MAX_HISTORY = 20  # 单会话保留的最大消息条数, 超出丢弃最早的
-
-RESOURCE_FILE = Path(__file__).resolve().parents[2] / "resource" / "三体.txt"
-
-# 中文 Embedding: 本地 ONNX 版 bge-small-zh-v1.5(无需 API Key, 无需 torch)
-EMBED_REPO = "Xenova/bge-small-zh-v1.5"
-EMBED_DIR = Path.home() / ".cache" / "chroma" / \
-    "onnx_models" / "bge-small-zh-v1.5"
-EMBED_FILES = (
-    "onnx/model.onnx",
-    "tokenizer.json",
-    "tokenizer_config.json",
-    "special_tokens_map.json",
-    "config.json",
+from server.core.chroma_base import (  # noqa: F401  旧模块从这里导入, 保持向后兼容
+    CHROMA_HOST,
+    CHROMA_PORT,
+    ChineseOnnxEmbeddings,
+    build_embeddings,
+    configure_proxy,
 )
-EMBED_MAX_LENGTH = 512
+from server.db.agent_checkpoint import checkpointer
+from server.mcp.chroma_rag import service
+
+# checkpoint metadata 里的来源标签
+AGENT_NAME = "ragChat"
+
+SYSTEM_PROMPT = (
+    "你是知识库文档问答助手, 资料来自用户上传并拆词入库的 Chroma 向量库。\n"
+    "可用工具:\n"
+    "- search_documents: 在知识库中检索与问题相关的文档片段\n"
+    "- list_documents: 查看知识库里有哪些文档\n"
+    "- document_info: 查看某篇文档的索引信息(切片数 / 导入时间等)\n\n"
+    "规则:\n"
+    "1. 涉及文档内容的问题, 必须先调用 search_documents 检索, 不得凭记忆编造。\n"
+    "2. 只能依据工具返回的资料作答, 资料里没有的信息要明确说不知道。\n"
+    "3. 回答时注明引用的文档名与段落序号, 方便用户核对。\n"
+    "4. 当前选中的文档由系统自动限定检索范围, 无需在提问里重复文档名。\n"
+    "5. 用户问\"有哪些文档 / 知识库里有什么\"时, 调用 list_documents。"
+)
 
 
-def configure_proxy() -> None:
-    """让 Chroma 下载 ONNX 模型时走代理。
+@dataclass
+class RagContext:
+    """随请求传入的运行时上下文: 前端侧边栏当前选中的文档名"""
+    document: str | None = None
 
-    Chroma 的下载基于 httpx(trust_env=True), 会读取 HTTP_PROXY/HTTPS_PROXY/ALL_PROXY;
-    同时把 localhost 加入 NO_PROXY, 避免本地 Chroma Server 的请求被代理。
+
+def _ctx_document(runtime: ToolRuntime[RagContext]) -> str | None:
+    """当前请求选中的文档; 工具未显式传参时作为默认检索范围"""
+    context = getattr(runtime, "context", None)
+    return getattr(context, "document", None) if context else None
+
+
+def _forward(runtime: ToolRuntime[RagContext], event: dict) -> None:
+    """把一条已序列化的事件体经 custom 流推给前端(非流式调用时 writer 为空操作)"""
+    writer = getattr(runtime, "stream_writer", None)
+    if writer is not None:
+        writer(event)
+
+
+def _mcp():
+    """延迟导入 MCP server: mcp.demo 会反向依赖 claw.service -> core.chroma_rag,
+    模块顶层导入会形成循环, 首次调用时再取。"""
+    from server.mcp.demo import mcp as rag_mcp
+    return rag_mcp
+
+
+async def _call_tool(name: str, arguments: dict) -> str:
+    """进程内调用已注册的 MCP 工具, 返回文本结果
+
+    /agent/chroma 目前与旧版一样不强制登录, 进程内调用不做权限校验;
+    外部通过 HTTP 访问 MCP 时仍由 MCPPermissionMiddleware 按 mcp:rag:* 拦截。
     """
-    proxy = os.environ.get("RAG_PROXY") or os.environ.get("HTTPS_PROXY")
-    if not proxy:
-        return
-    for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
-        os.environ.setdefault(key, proxy)
-    no_proxy = os.environ.get("NO_PROXY", "")
-    os.environ["NO_PROXY"] = ",".join(
-        filter(None, [no_proxy, "localhost", "127.0.0.1"]))
-
-
-def download_embed_model() -> None:
-    """从 HuggingFace 拉取中文 ONNX 模型, 缺哪个文件补哪个(已缓存则跳过)。"""
-    for name in EMBED_FILES:
-        if (EMBED_DIR / name).exists():
-            continue
-        hf_hub_download(repo_id=EMBED_REPO, filename=name,
-                        local_dir=str(EMBED_DIR))
-
-
-class ChineseOnnxEmbeddings(Embeddings):
-    """中文 ONNX Embedding 适配 LangChain 接口。
-
-    模型: bge-small-zh-v1.5(ONNX 版), 走 onnxruntime CPU 推理;
-    分词用 tokenizers 的 WordPiece; 池化方式与 BGE 一致: 取 [CLS] 向量再做 L2 归一化。
-    """
-
-    def __init__(self, batch_size: int = 16) -> None:
-        download_embed_model()
-        self._batch_size = batch_size
-        self._tokenizer = Tokenizer.from_file(
-            str(EMBED_DIR / "tokenizer.json"))
-        self._tokenizer.enable_truncation(max_length=EMBED_MAX_LENGTH)
-        # batch 内序列长度不一, 必须 padding 到等长才能拼成规整的 2D 张量
-        self._tokenizer.enable_padding(
-            pad_id=0, pad_token="[PAD]", pad_type_id=0)
-        self._session = ort.InferenceSession(
-            str(EMBED_DIR / "onnx" / "model.onnx"),
-            providers=["CPUExecutionProvider"],
-        )
-        self._input_names = {i.name for i in self._session.get_inputs()}
-
-    def _encode(self, texts: list[str]) -> list[list[float]]:
-        encodings = self._tokenizer.encode_batch(texts)
-        input_ids = np.array([e.ids for e in encodings], dtype=np.int64)
-        attention_mask = np.array(
-            [e.attention_mask for e in encodings], dtype=np.int64)
-        feed = {"input_ids": input_ids, "attention_mask": attention_mask}
-        if "token_type_ids" in self._input_names:
-            feed["token_type_ids"] = np.zeros_like(input_ids)
-        last_hidden = self._session.run(None, feed)[0]
-        cls = last_hidden[:, 0, :]
-        norm = np.clip(np.linalg.norm(cls, axis=1, keepdims=True), 1e-12, None)
-        return (cls / norm).tolist()
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        vectors: list[list[float]] = []
-        for i in range(0, len(texts), self._batch_size):
-            vectors.extend(self._encode(texts[i:i + self._batch_size]))
-        return vectors
-
-    def embed_query(self, text: str) -> list[float]:
-        return self._encode([text])[0]
-
-
-def build_embeddings() -> Embeddings:
-    return ChineseOnnxEmbeddings()
-
-
-def build_vectorstore(embeddings: Embeddings) -> Chroma:
-    if not REBUILD:
-        # 复用服务端已有集合, 避免每次启动都重复切分/灌库
-        return Chroma(
-            collection_name=COLLECTION_NAME,
-            embedding_function=embeddings,
-            host=CHROMA_HOST,
-            port=CHROMA_PORT,
-        )
-    client = chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)
     try:
-        client.delete_collection(COLLECTION_NAME)
-    except Exception:  # noqa: BLE001  集合不存在时忽略
-        pass
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500, chunk_overlap=100)
-    chunks = splitter.split_documents(
-        [Document(
-            page_content=RESOURCE_FILE.read_text(encoding="utf-8"),
-            metadata={"source": RESOURCE_FILE.name},
-        )]
-    )
-    return Chroma.from_documents(
-        documents=chunks,
-        embedding=embeddings,
-        collection_name=COLLECTION_NAME,
-        host=CHROMA_HOST,
-        port=CHROMA_PORT,
+        result = await _mcp().call_tool(name, arguments)
+    except Exception as exc:  # 参数校验失败 / 工具内部报错都交回模型
+        return f"工具 {name} 调用失败: {exc}"
+    return "\n".join(
+        block.text for block in (getattr(result, "content", None) or [])
+        if getattr(block, "text", "")
     )
 
 
-def format_docs(docs: list[Document]) -> str:
-    return "\n\n".join(doc.page_content for doc in docs)
+@tool
+async def search_documents(query: str, runtime: ToolRuntime[RagContext]) -> str:
+    """在已录入的知识库文档中检索与问题相关的片段。
 
+    返回命中的片段(带文档名与段落序号), 必须依据返回内容作答。
 
-def build_chain(embeddings: Embeddings):
-    vectorstore = build_vectorstore(embeddings)
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-
-    llm = ChatOpenAI(
-        model="deepseek-flash",
-        api_key=os.environ["OPENAI_API_KEY"],
-        base_url=os.environ["OPENAI_BASE_URL"],
-        max_tokens=1024,
-    )
-
-    prompt = ChatPromptTemplate.from_messages([
-        ("system",
-         "你是《三体》小说的问答助手。只能依据下面资料回答, 资料中没有的信息要明确说不知道。\n\n"
-         "资料:\n{context}"),
-        MessagesPlaceholder("history"),
-        ("human", "{question}"),
-    ])
-
-    answer_chain = prompt | llm | StrOutputParser()
-    return answer_chain, retriever
-
-
-_chain = None
-_retriever = None
-_init_lock = threading.Lock()
-
-# 会话历史: {conversation_id: [HumanMessage/AIMessage, ...]}(进程内, 重启即清空)
-_histories: dict[str, list] = {}
-
-
-def get_chain():
-    """懒加载: 首次调用才加载 ONNX 模型并连接 Chroma, 避免拖慢服务启动。
-
-    并发首次调用时用锁串行初始化, 避免重复下载模型/重复灌库。
+    Args:
+        query: 用于向量检索的自然语言问题
     """
-    global _chain, _retriever
-    if _chain is None:
-        with _init_lock:
-            if _chain is None:
-                configure_proxy()
-                _chain, _retriever = build_chain(build_embeddings())
-    return _chain, _retriever
+    text = await _call_tool("search_documents", {
+        "query": query,
+        "document": _ctx_document(runtime) or "",
+    })
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return text
+
+    # 命中来源推给前端标注引用; 未命中时清空上一轮的来源
+    _forward(runtime, {
+        "event": "sources",
+        "data": json.dumps({
+            "document": payload.get("document", ""),
+            "sources": payload.get("sources", []),
+        }, ensure_ascii=False),
+    })
+    return payload.get("text", text)
 
 
-def _history(conversation_id: str) -> list:
-    return _histories.setdefault(conversation_id, [])
+@tool
+async def list_documents(runtime: ToolRuntime[RagContext]) -> str:
+    """查询知识库里已录入的文档清单(文件名 / 切片数 / 字数 / 导入时间)。
 
-
-async def astream_answer(conversation_id: str, question: str):
-    """检索 -> 流式生成, 逐段 yield 文本; 生成结束后把本轮问答写回历史。
-
-    检索是同步阻塞调用, 放到线程池执行, 避免阻塞 FastAPI 事件循环。
+    用户问"有哪些文档 / 知识库里有什么"时调用。
     """
-    chain, retriever = get_chain()
-    docs = await asyncio.to_thread(retriever.invoke, question)
-    history = _history(conversation_id)
+    return await _call_tool("list_documents", {})
 
-    answer = ""
-    async for chunk in chain.astream({
-        "context": format_docs(docs),
-        "question": question,
-        "history": history,
-    }):
-        if chunk:
-            answer += chunk
-            yield chunk
 
-    history.append(HumanMessage(content=question))
-    history.append(AIMessage(content=answer))
-    del history[:-MAX_HISTORY]  # 只保留最近 MAX_HISTORY 条, 防止无限增长
+@tool
+async def document_info(runtime: ToolRuntime[RagContext], document: str = "") -> str:
+    """查询某一篇文档的索引信息(切片数 / 字数 / 导入时间 / 开头预览)。
+
+    Args:
+        document: 文档名, 如 三体.txt; 留空表示当前选中的文档
+    """
+    return await _call_tool("get_document_info", {
+        "document": document or _ctx_document(runtime) or "",
+    })
+
+
+model = ChatOpenAI(
+    model="deepseek-flash",
+    api_key=os.environ["OPENAI_API_KEY"],
+    base_url=os.environ["OPENAI_BASE_URL"],
+    max_tokens=1024,
+    timeout=30,
+)
+
+agent = create_agent(
+    model=model,
+    tools=[search_documents, list_documents, document_info],
+    system_prompt=SYSTEM_PROMPT,
+    context_schema=RagContext,
+    # 会话记忆落 PostgreSQL, 由路由传入的 thread_id 区分会话
+    checkpointer=checkpointer,
+)
+
+
+def _text_of(message) -> str:
+    """从模型增量消息里取出纯文本(部分模型 content 是分块列表)"""
+    content = getattr(message, "content", "")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            part.get("text", "") for part in content if isinstance(part, dict))
+    return ""
+
+
+async def astream(conversation_id: str, question: str,
+                  document: str | None = None) -> AsyncIterator[dict]:
+    """驱动 tool-calling Agent, 产出 SSE 事件体 {"event": 事件名, "data": JSON 字符串}
+
+    - custom 流: 工具内推的 sources 事件, 原样透传
+    - messages 流: 模型增量文本, 统一包成 on_chat_model_stream
+
+    document 为侧边栏选中的文档名; 不传表示在整个知识库范围内问答。
+    """
+    # 文档名并入 thread_id: 切换文档天然开新会话, 不会复用上一篇的对话记忆
+    thread_id = f"{conversation_id}@{document}" if document else conversation_id
+    config = {
+        "configurable": {"thread_id": thread_id},
+        "metadata": {"agent": AGENT_NAME},
+        # "recursion_limit": 5,
+    }
+    async for mode, chunk in agent.astream(
+        {"messages": [{"role": "user", "content": question}]},
+        config=config,
+        context=RagContext(document=document),
+        stream_mode=["messages", "custom"],
+    ):
+        if mode == "custom":
+            if isinstance(chunk, dict) and "event" in chunk:
+                yield chunk
+            continue
+        message, _metadata = chunk
+        if not isinstance(message, AIMessageChunk):
+            continue
+        text = _text_of(message)
+        if text:
+            yield {
+                "event": "on_chat_model_stream",
+                "data": json.dumps({"node": "chroma-rag", "content": text},
+                                   ensure_ascii=False),
+            }
+
+
+# ---- 供 REST 路由调用的知识库操作(拆词导入 / 文档清单) ----
+
+async def ingest_document(filename: str, content: str) -> dict:
+    """txt 上传入口: 拆词并写入 Chroma(与 MCP ingest_document 同一实现)"""
+    return await asyncio.to_thread(service.ingest_text, filename, content)
+
+
+async def list_all_documents() -> list[dict]:
+    """侧边栏文档清单"""
+    return await asyncio.to_thread(service.list_documents)
+
+
+async def delete_document(filename: str) -> dict:
+    """删除整篇文档(按 source 清理全部切片)"""
+    return await asyncio.to_thread(service.delete_document, filename)

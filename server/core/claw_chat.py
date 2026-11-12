@@ -205,7 +205,7 @@ async def astream(conversation_id: str, question: str,
     config = {
         "configurable": {"thread_id": conversation_id},
         "metadata": {"agent": AGENT_NAME},
-        "recursion_limit": 5,
+        # "recursion_limit": 5,
     }
     async for mode, chunk in agent.astream(
         {"messages": [{"role": "user", "content": question}]},

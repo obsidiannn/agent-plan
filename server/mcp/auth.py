@@ -36,6 +36,11 @@ TOOL_DOMAIN = {
     "get_data_info": "claw",
     "crawl_guba": "claw",
     "add_note": "notes",
+    # RAG 知识库(资源 scheme 也是 rag: mcp:rag:res:documents)
+    "search_documents": "rag",
+    "list_documents": "rag",
+    "get_document_info": "rag",
+    "ingest_document": "rag",
 }
 
 PROMPT_DOMAIN = {

@@ -35,3 +35,9 @@ class ClawChatRequest(AnalyzeRequest):
     """股吧舆情问答请求，在通用会话字段外增加采集参数过滤"""
     claw_param: Optional[str] = Field(
         None, description="按 claw_task_detail.claw_param 过滤(如股票代码 002526)；不传表示全库")
+
+
+class RagChatRequest(AnalyzeRequest):
+    """RAG 知识库问答请求，在通用会话字段外增加选中文档"""
+    document: Optional[str] = Field(
+        None, description="侧边栏选中的文档名(如 三体.txt)；不传表示在整个知识库中检索")
