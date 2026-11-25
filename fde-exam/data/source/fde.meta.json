@@ -1,0 +1,166 @@
+{
+  "source": {
+    "file": "/Users/Zhuanz1/code/PY/agent-plan/fde-exam/doc/fde.pdf",
+    "title": "腾讯云人工智能前沿部署工程师（FDE）",
+    "pages": 151,
+    "sha256": "9c27898c21257625d314117131754a4a149ec1b05250abf9d19233b056e5bfd5",
+    "parsedAt": "2026-11-25T15:42:24.403521+00:00",
+    "parserVersion": "pymupdf-1"
+  },
+  "pages": 151,
+  "chapters": 12,
+  "sections": 88,
+  "chunks": 291,
+  "tables": 136,
+  "lowConfidenceTables": 0,
+  "images": 21,
+  "imageFiles": [
+    {
+      "page": 16,
+      "xref": 426,
+      "file": "p016-00.png",
+      "width": 1480,
+      "height": 584
+    },
+    {
+      "page": 29,
+      "xref": 565,
+      "file": "p029-00.png",
+      "width": 1514,
+      "height": 644
+    },
+    {
+      "page": 34,
+      "xref": 663,
+      "file": "p034-00.png",
+      "width": 935,
+      "height": 847
+    },
+    {
+      "page": 41,
+      "xref": 680,
+      "file": "p041-00.png",
+      "width": 3836,
+      "height": 2061
+    },
+    {
+      "page": 54,
+      "xref": 775,
+      "file": "p054-00.png",
+      "width": 1522,
+      "height": 462
+    },
+    {
+      "page": 67,
+      "xref": 952,
+      "file": "p067-00.png",
+      "width": 1800,
+      "height": 1280
+    },
+    {
+      "page": 71,
+      "xref": 961,
+      "file": "p071-00.png",
+      "width": 1800,
+      "height": 1640
+    },
+    {
+      "page": 74,
+      "xref": 968,
+      "file": "p074-00.png",
+      "width": 1800,
+      "height": 1200
+    },
+    {
+      "page": 79,
+      "xref": 979,
+      "file": "p079-00.png",
+      "width": 1800,
+      "height": 1640
+    },
+    {
+      "page": 83,
+      "xref": 992,
+      "file": "p083-00.png",
+      "width": 1800,
+      "height": 1280
+    },
+    {
+      "page": 86,
+      "xref": 999,
+      "file": "p086-00.png",
+      "width": 1800,
+      "height": 1520
+    },
+    {
+      "page": 94,
+      "xref": 1099,
+      "file": "p094-00.png",
+      "width": 1880,
+      "height": 1320
+    },
+    {
+      "page": 100,
+      "xref": 1173,
+      "file": "p100-00.png",
+      "width": 1800,
+      "height": 1640
+    },
+    {
+      "page": 103,
+      "xref": 1180,
+      "file": "p103-00.png",
+      "width": 1800,
+      "height": 1240
+    },
+    {
+      "page": 104,
+      "xref": 1183,
+      "file": "p104-00.png",
+      "width": 1800,
+      "height": 1400
+    },
+    {
+      "page": 108,
+      "xref": 1192,
+      "file": "p108-00.png",
+      "width": 1800,
+      "height": 1560
+    },
+    {
+      "page": 113,
+      "xref": 1204,
+      "file": "p113-00.png",
+      "width": 1800,
+      "height": 1120
+    },
+    {
+      "page": 125,
+      "xref": 1229,
+      "file": "p125-00.png",
+      "width": 1800,
+      "height": 1280
+    },
+    {
+      "page": 128,
+      "xref": 1236,
+      "file": "p128-00.png",
+      "width": 1800,
+      "height": 1400
+    },
+    {
+      "page": 132,
+      "xref": 1245,
+      "file": "p132-00.png",
+      "width": 1800,
+      "height": 1360
+    },
+    {
+      "page": 141,
+      "xref": 1264,
+      "file": "p141-00.jpeg",
+      "width": 1920,
+      "height": 978
+    }
+  ]
+}

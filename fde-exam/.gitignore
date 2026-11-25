@@ -1,0 +1,16 @@
+web/node_modules/
+web/.next/
+web/prisma/*.db
+web/prisma/*.db-journal
+web/prisma/*.db-wal
+web/prisma/*.db-shm
+web/src/generated/prisma/
+web/.env
+generator/.env
+generator/.venv/
+generator/.pytest_cache/
+generator/__pycache__/
+generator/**/__pycache__/
+generator/reports/*.csv
+data/source/images/
+.DS_Store

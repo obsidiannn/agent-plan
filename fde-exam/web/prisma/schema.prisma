@@ -1,0 +1,240 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  nickname     String?
+  role         String   @default("USER")
+  status       String   @default("ACTIVE")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  attempts ExamAttempt[]
+
+  @@map("users")
+}
+
+model SourceDoc {
+  id          String   @id @default(cuid())
+  title       String
+  url         String?
+  format      String   @default("PDF")
+  filePath    String?
+  fileHash    String?
+  pageCount   Int      @default(0)
+  contentHash String   @unique
+  wordCount   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  chapters Chapter[]
+
+  @@map("source_docs")
+}
+
+model Chapter {
+  id        String @id @default(cuid())
+  docId     String
+  title     String
+  orderNo   Int
+  weight    Float  @default(1)
+  pageStart Int?
+  pageEnd   Int?
+  anchor    String?
+
+  doc       SourceDoc     @relation(fields: [docId], references: [id], onDelete: Cascade)
+  chunks    SourceChunk[]
+  questions Question[]
+
+  @@unique([docId, orderNo])
+  @@index([pageStart])
+  @@map("chapters")
+}
+
+model SourceChunk {
+  id              String @id @default(cuid())
+  chapterId       String
+  orderNo         Int
+  content         String
+  contentHash     String
+  tokenCount      Int    @default(0)
+  pageStart       Int?
+  pageEnd         Int?
+  sectionRef      String?
+  tableConfidence String?
+
+  chapter   Chapter    @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  questions Question[]
+
+  @@unique([chapterId, orderNo])
+  @@index([contentHash])
+  @@index([pageStart])
+  @@map("source_chunks")
+}
+
+model Question {
+  id            String @id @default(cuid())
+  type          String
+  stem          String
+  optionsJson   String
+  answerJson    String
+  explanation   String
+  difficulty    String @default("MEDIUM")
+
+  chapterId      String?
+  knowledgePoint String?
+  sourceChunkId  String?
+  evidenceQuote  String?
+  sourceRef      String?
+  sourcePage     Int?
+  sourcePageEnd  Int?
+
+  contentHash    String  @unique
+  claim          String?
+  claimHash      String?
+  simhash        String?
+  embeddingJson  String?
+  dedupeMetaJson String?
+
+  status       String  @default("PENDING_REVIEW")
+  rejectReason String?
+  qualityScore Float?
+  qualityDetailJson String?
+  generationRunId   String?
+  promptVersion     String?
+  version           Int     @default(1)
+
+  reviewedBy String?
+  reviewedAt DateTime?
+  reviewNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  chapter       Chapter?      @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  sourceChunk   SourceChunk?  @relation(fields: [sourceChunkId], references: [id], onDelete: SetNull)
+  generationRun GenerationRun? @relation(fields: [generationRunId], references: [id], onDelete: SetNull)
+  attemptItems  AttemptQuestion[]
+
+  @@index([status, type])
+  @@index([chapterId, type])
+  @@index([claimHash])
+  @@index([simhash])
+  @@index([sourcePage])
+  @@index([generationRunId])
+  @@map("questions")
+}
+
+model GenerationRun {
+  id             String   @id @default(cuid())
+  sourceHash     String
+  model          String
+  promptVersion  String
+  seed           Int?
+  targetCount    Int
+  generatedCount Int      @default(0)
+  acceptedCount  Int      @default(0)
+  rejectedCount  Int      @default(0)
+  status         String   @default("RUNNING")
+  errorMessage   String?
+  costUsd        Float?
+  startedAt      DateTime @default(now())
+  finishedAt     DateTime?
+
+  questions  Question[]
+  candidates QuestionCandidate[]
+
+  @@index([status, startedAt])
+  @@map("generation_runs")
+}
+
+model QuestionCandidate {
+  id            String  @id @default(cuid())
+  runId         String?
+  type          String
+  contentHash   String  @unique
+  claimHash     String?
+  simhash       String?
+  embeddingJson String?
+  status        String
+  rejectReason  String?
+  questionId    String? @unique
+  createdAt     DateTime @default(now())
+
+  run GenerationRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([claimHash])
+  @@index([simhash])
+  @@map("question_candidates")
+}
+
+model ExamAttempt {
+  id        String @id @default(cuid())
+  userId    String
+  status    String @default("IN_PROGRESS")
+  submitType String?
+
+  activeAttemptKey String? @unique
+
+  paperSeed     String
+  questionCount Int    @default(60)
+  singleCount   Int    @default(40)
+  multipleCount Int    @default(20)
+  totalScore    Float  @default(100)
+
+  startedAt   DateTime  @default(now())
+  expiresAt   DateTime?
+  submittedAt DateTime?
+  durationSeconds Int?
+
+  score        Float?
+  passed       Boolean?
+  correctCount Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items AttemptQuestion[]
+
+  @@index([userId, createdAt])
+  @@index([userId, status])
+  @@map("exam_attempts")
+}
+
+model AttemptQuestion {
+  id         String @id @default(cuid())
+  attemptId  String
+  questionId String?
+  orderNo    Int
+
+  type            String
+  stem            String
+  optionsJson     String
+  answerJson      String
+  explanation     String?
+  chapterTitle    String?
+  knowledgePoint  String?
+  evidenceQuote   String?
+  sourcePage      Int?
+
+  userAnswerJson String?
+  isCorrect      Boolean?
+  score          Float   @default(0)
+  maxScore       Float
+  answeredAt     DateTime?
+
+  attempt  ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question Question?   @relation(fields: [questionId], references: [id], onDelete: SetNull)
+
+  @@unique([attemptId, orderNo])
+  @@index([questionId])
+  @@map("attempt_questions")
+}

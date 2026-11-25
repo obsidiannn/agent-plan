@@ -1,0 +1,749 @@
+{
+  "source": {
+    "file": "/Users/Zhuanz1/code/PY/agent-plan/fde-exam/doc/fde.pdf",
+    "title": "腾讯云人工智能前沿部署工程师（FDE）",
+    "pages": 151,
+    "sha256": "9c27898c21257625d314117131754a4a149ec1b05250abf9d19233b056e5bfd5",
+    "parsedAt": "2026-11-25T15:42:24.403521+00:00",
+    "parserVersion": "pymupdf-1"
+  },
+  "chapters": [
+    {
+      "orderNo": 1,
+      "title": "01 概览与方法论",
+      "anchor": "sec-1",
+      "pageStart": 4,
+      "pageEnd": 13,
+      "weight": 0.0682,
+      "sections": [
+        {
+          "ref": "1.1",
+          "title": "1.1 FDE 的本质定义",
+          "pageStart": 4,
+          "pageEnd": 6,
+          "anchor": "sec-1-1"
+        },
+        {
+          "ref": "1.2",
+          "title": "1.2 真假 FDE 的试金石",
+          "pageStart": 7,
+          "pageEnd": 7,
+          "anchor": "sec-1-2"
+        },
+        {
+          "ref": "1.3",
+          "title": "1.3 Echo 与 Delta：两种能力侧",
+          "pageStart": 8,
+          "pageEnd": 9,
+          "anchor": "sec-1-3"
+        },
+        {
+          "ref": "1.4",
+          "title": "1.4 三个陷阱",
+          "pageStart": 10,
+          "pageEnd": 11,
+          "anchor": "sec-1-4"
+        },
+        {
+          "ref": "1.5",
+          "title": "1.5 组织归属：FDE 团队该放哪个部门",
+          "pageStart": 12,
+          "pageEnd": 12,
+          "anchor": "sec-1-5"
+        },
+        {
+          "ref": "1.6",
+          "title": "1.6 本章小结",
+          "pageStart": 13,
+          "pageEnd": 13,
+          "anchor": "sec-1-6"
+        }
+      ]
+    },
+    {
+      "orderNo": 2,
+      "title": "02 腾讯云AI重点产品介绍",
+      "anchor": "sec-2",
+      "pageStart": 14,
+      "pageEnd": 27,
+      "weight": 0.0909,
+      "sections": [
+        {
+          "ref": "2.1",
+          "title": "2.1 WorkBuddy：知识工作者的 AI 协作平台",
+          "pageStart": 15,
+          "pageEnd": 17,
+          "anchor": "sec-2-1"
+        },
+        {
+          "ref": "2.2",
+          "title": "2.2 CodeBuddy：开发者的 AI 编程助手",
+          "pageStart": 18,
+          "pageEnd": 18,
+          "anchor": "sec-2-2"
+        },
+        {
+          "ref": "2.3",
+          "title": "2.3 ADP：企业 AI 应用开发平台",
+          "pageStart": 19,
+          "pageEnd": 20,
+          "anchor": "sec-2-3"
+        },
+        {
+          "ref": "2.4",
+          "title": "2.4 Miora：AI 创意智能体工作室",
+          "pageStart": 21,
+          "pageEnd": 22,
+          "anchor": "sec-2-4"
+        },
+        {
+          "ref": "2.5",
+          "title": "2.5 Ardot：AI 设计智能体协作平台",
+          "pageStart": 23,
+          "pageEnd": 24,
+          "anchor": "sec-2-5"
+        },
+        {
+          "ref": "2.6",
+          "title": "2.6 客户落地的四层门槛",
+          "pageStart": 25,
+          "pageEnd": 25,
+          "anchor": "sec-2-6"
+        },
+        {
+          "ref": "2.7",
+          "title": "2.7 三层赋能体系：平台层 · 工具层 · 生态层",
+          "pageStart": 26,
+          "pageEnd": 26,
+          "anchor": "sec-2-7"
+        },
+        {
+          "ref": "2.8",
+          "title": "2.8 本章小结",
+          "pageStart": 26,
+          "pageEnd": 27,
+          "anchor": "sec-2-8"
+        }
+      ]
+    },
+    {
+      "orderNo": 3,
+      "title": "03 人工智能工程",
+      "anchor": "sec-3",
+      "pageStart": 28,
+      "pageEnd": 39,
+      "weight": 0.0682,
+      "sections": [
+        {
+          "ref": "3.1",
+          "title": "3.1 Prompt 工程——把要求写成模型能执行的规格",
+          "pageStart": 28,
+          "pageEnd": 29,
+          "anchor": "sec-3-1"
+        },
+        {
+          "ref": "3.2",
+          "title": "3.2 上下文管理——选而不是全塞",
+          "pageStart": 30,
+          "pageEnd": 30,
+          "anchor": "sec-3-2"
+        },
+        {
+          "ref": "3.3",
+          "title": "3.3 Harness 构建——把模型包成可运行的系统",
+          "pageStart": 31,
+          "pageEnd": 33,
+          "anchor": "sec-3-3"
+        },
+        {
+          "ref": "3.4",
+          "title": "3.4 Loop 循环——Agent 怎么转圈、什么时候停",
+          "pageStart": 34,
+          "pageEnd": 35,
+          "anchor": "sec-3-4"
+        },
+        {
+          "ref": "3.5",
+          "title": "3.5 MCP 认证——连外部工具时怎么证明\"我是我\"",
+          "pageStart": 36,
+          "pageEnd": 38,
+          "anchor": "sec-3-5"
+        },
+        {
+          "ref": "3.6",
+          "title": "3.6 本章小结",
+          "pageStart": 39,
+          "pageEnd": 39,
+          "anchor": "sec-3-6"
+        }
+      ]
+    },
+    {
+      "orderNo": 4,
+      "title": "04 WorkBuddy 上手实操",
+      "anchor": "sec-4",
+      "pageStart": 40,
+      "pageEnd": 48,
+      "weight": 0.0795,
+      "sections": [
+        {
+          "ref": "4.1",
+          "title": "4.1 界面结构与第一个任务",
+          "pageStart": 40,
+          "pageEnd": 41,
+          "anchor": "sec-4-1"
+        },
+        {
+          "ref": "4.2",
+          "title": "4.2 技能（Skill）：装现成的，也会自己建",
+          "pageStart": 42,
+          "pageEnd": 42,
+          "anchor": "sec-4-2"
+        },
+        {
+          "ref": "4.3",
+          "title": "4.3 造一个专属专家",
+          "pageStart": 43,
+          "pageEnd": 44,
+          "anchor": "sec-4-3"
+        },
+        {
+          "ref": "4.4",
+          "title": "4.4 连接器与 MCP：让 AI 碰到真实数据",
+          "pageStart": 45,
+          "pageEnd": 45,
+          "anchor": "sec-4-4"
+        },
+        {
+          "ref": "4.5",
+          "title": "4.5 自动化任务与企业侧治理",
+          "pageStart": 46,
+          "pageEnd": 46,
+          "anchor": "sec-4-5"
+        },
+        {
+          "ref": "4.6",
+          "title": "4.6 实操演练：4 小时跑通一个完整闭环",
+          "pageStart": 47,
+          "pageEnd": 47,
+          "anchor": "sec-4-6"
+        },
+        {
+          "ref": "4.7",
+          "title": "4.7 本章小结",
+          "pageStart": 48,
+          "pageEnd": 48,
+          "anchor": "sec-4-7"
+        }
+      ]
+    },
+    {
+      "orderNo": 5,
+      "title": "05 管理端：企业后台与 WMA 配置实战",
+      "anchor": "sec-5",
+      "pageStart": 49,
+      "pageEnd": 65,
+      "weight": 0.0909,
+      "sections": [
+        {
+          "ref": "5.1",
+          "title": "5.1 三个端与产品家族",
+          "pageStart": 49,
+          "pageEnd": 51,
+          "anchor": "sec-5-1"
+        },
+        {
+          "ref": "5.2",
+          "title": "5.2 部署形态选择",
+          "pageStart": 52,
+          "pageEnd": 52,
+          "anchor": "sec-5-2"
+        },
+        {
+          "ref": "5.3",
+          "title": "5.3 成员管理",
+          "pageStart": 53,
+          "pageEnd": 53,
+          "anchor": "sec-5-3"
+        },
+        {
+          "ref": "5.4",
+          "title": "5.4 能力下发策略",
+          "pageStart": 54,
+          "pageEnd": 57,
+          "anchor": "sec-5-4"
+        },
+        {
+          "ref": "5.5",
+          "title": "5.5 企业级连接器：把客户系统接进来",
+          "pageStart": 58,
+          "pageEnd": 58,
+          "anchor": "sec-5-5"
+        },
+        {
+          "ref": "5.6",
+          "title": "5.6 WMA 与积分口径",
+          "pageStart": 59,
+          "pageEnd": 63,
+          "anchor": "sec-5-6"
+        },
+        {
+          "ref": "5.7",
+          "title": "5.7 算得清、管得住：度量与审计",
+          "pageStart": 64,
+          "pageEnd": 64,
+          "anchor": "sec-5-7"
+        },
+        {
+          "ref": "5.8",
+          "title": "5.8 本章小结",
+          "pageStart": 65,
+          "pageEnd": 65,
+          "anchor": "sec-5-8"
+        }
+      ]
+    },
+    {
+      "orderNo": 6,
+      "title": "06 进场：挖真需求、破一线抵触",
+      "anchor": "sec-6",
+      "pageStart": 66,
+      "pageEnd": 81,
+      "weight": 0.0795,
+      "sections": [
+        {
+          "ref": "6.1",
+          "title": "6.1 进场访谈——别急着接需求，先挖三层",
+          "pageStart": 66,
+          "pageEnd": 68,
+          "anchor": "sec-6-1"
+        },
+        {
+          "ref": "6.2",
+          "title": "6.2 隐性流程——客户自己都说不清的那部分",
+          "pageStart": 69,
+          "pageEnd": 71,
+          "anchor": "sec-6-2"
+        },
+        {
+          "ref": "6.3",
+          "title": "6.3 Demo 沟通语言——业务方唯一听得懂的话",
+          "pageStart": 72,
+          "pageEnd": 72,
+          "anchor": "sec-6-3"
+        },
+        {
+          "ref": "6.4",
+          "title": "6.4 一线抵触——技术问题都有解法，人的问题没有",
+          "pageStart": 73,
+          "pageEnd": 77,
+          "anchor": "sec-6-4"
+        },
+        {
+          "ref": "6.5",
+          "title": "6.5 场景优先级——先定场景，再动手",
+          "pageStart": 78,
+          "pageEnd": 79,
+          "anchor": "sec-6-5"
+        },
+        {
+          "ref": "6.6",
+          "title": "6.6 场景案例：教育行业陪跑",
+          "pageStart": 80,
+          "pageEnd": 80,
+          "anchor": "sec-6-6"
+        },
+        {
+          "ref": "6.7",
+          "title": "6.7 本章小结",
+          "pageStart": 80,
+          "pageEnd": 81,
+          "anchor": "sec-6-7"
+        }
+      ]
+    },
+    {
+      "orderNo": 7,
+      "title": "07 交付：做成、且验得动",
+      "anchor": "sec-7",
+      "pageStart": 82,
+      "pageEnd": 96,
+      "weight": 0.0682,
+      "sections": [
+        {
+          "ref": "7.1",
+          "title": "7.1 PEV 交付闭环",
+          "pageStart": 82,
+          "pageEnd": 84,
+          "anchor": "sec-7-1"
+        },
+        {
+          "ref": "7.2",
+          "title": "7.2 验收标准",
+          "pageStart": 85,
+          "pageEnd": 87,
+          "anchor": "sec-7-2"
+        },
+        {
+          "ref": "7.3",
+          "title": "7.3 L0–L4 成熟度框架",
+          "pageStart": 88,
+          "pageEnd": 90,
+          "anchor": "sec-7-3"
+        },
+        {
+          "ref": "7.4",
+          "title": "7.4 范围控制四纪律",
+          "pageStart": 91,
+          "pageEnd": 93,
+          "anchor": "sec-7-4"
+        },
+        {
+          "ref": "7.5",
+          "title": "7.5 Land and Expand",
+          "pageStart": 94,
+          "pageEnd": 94,
+          "anchor": "sec-7-5"
+        },
+        {
+          "ref": "7.6",
+          "title": "7.6 本章小结",
+          "pageStart": 95,
+          "pageEnd": 96,
+          "anchor": "sec-7-6"
+        }
+      ]
+    },
+    {
+      "orderNo": 8,
+      "title": "08 沉淀：把经验变成组织资产",
+      "anchor": "sec-8",
+      "pageStart": 97,
+      "pageEnd": 110,
+      "weight": 0.0909,
+      "sections": [
+        {
+          "ref": "8.1",
+          "title": "8.1 双向蒸馏——从「项目总结」到「可复用资产」",
+          "pageStart": 98,
+          "pageEnd": 99,
+          "anchor": "sec-8-1"
+        },
+        {
+          "ref": "8.2",
+          "title": "8.2 Skill 沉淀的正确姿势",
+          "pageStart": 100,
+          "pageEnd": 101,
+          "anchor": "sec-8-2"
+        },
+        {
+          "ref": "8.3",
+          "title": "8.3 三态溯源与四条红线——沉淀的东西怎么让人信",
+          "pageStart": 102,
+          "pageEnd": 103,
+          "anchor": "sec-8-3"
+        },
+        {
+          "ref": "8.4",
+          "title": "8.4 成本曲线——沉淀的商业价值到底在哪",
+          "pageStart": 104,
+          "pageEnd": 104,
+          "anchor": "sec-8-4"
+        },
+        {
+          "ref": "8.5",
+          "title": "8.5 冷启动四条铁律与定价陷阱——沉淀机制怎么起步",
+          "pageStart": 105,
+          "pageEnd": 105,
+          "anchor": "sec-8-5"
+        },
+        {
+          "ref": "8.6",
+          "title": "8.6 信任四问——一线员工交出经验前要回答的问题",
+          "pageStart": 106,
+          "pageEnd": 106,
+          "anchor": "sec-8-6"
+        },
+        {
+          "ref": "8.7",
+          "title": "8.7 沉淀载体——资产放在哪里、长什么样",
+          "pageStart": 107,
+          "pageEnd": 109,
+          "anchor": "sec-8-7"
+        },
+        {
+          "ref": "8.8",
+          "title": "8.8 本章小结",
+          "pageStart": 110,
+          "pageEnd": 110,
+          "anchor": "sec-8-8"
+        }
+      ]
+    },
+    {
+      "orderNo": 9,
+      "title": "09 综合实战：12 周 FDE 养成计划",
+      "anchor": "sec-9",
+      "pageStart": 111,
+      "pageEnd": 123,
+      "weight": 0.0682,
+      "sections": [
+        {
+          "ref": "9.1",
+          "title": "9.1 总原则——WorkBuddy 是放大器，不是替代者",
+          "pageStart": 111,
+          "pageEnd": 112,
+          "anchor": "sec-9-1"
+        },
+        {
+          "ref": "9.2",
+          "title": "9.2 12 周四阶段工作流",
+          "pageStart": 113,
+          "pageEnd": 116,
+          "anchor": "sec-9-2"
+        },
+        {
+          "ref": "9.3",
+          "title": "9.3 四道 Gate 与教练闭环",
+          "pageStart": 117,
+          "pageEnd": 118,
+          "anchor": "sec-9-3"
+        },
+        {
+          "ref": "9.4",
+          "title": "9.4 工具边界清单",
+          "pageStart": 119,
+          "pageEnd": 121,
+          "anchor": "sec-9-4"
+        },
+        {
+          "ref": "9.5",
+          "title": "9.5 收尾行动清单：回到岗位的上手清单",
+          "pageStart": 122,
+          "pageEnd": 122,
+          "anchor": "sec-9-5"
+        },
+        {
+          "ref": "9.6",
+          "title": "9.6 本章小结",
+          "pageStart": 122,
+          "pageEnd": 123,
+          "anchor": "sec-9-6"
+        }
+      ]
+    },
+    {
+      "orderNo": 10,
+      "title": "10 安全治理与护栏",
+      "anchor": "sec-10",
+      "pageStart": 124,
+      "pageEnd": 136,
+      "weight": 0.1023,
+      "sections": [
+        {
+          "ref": "10.1",
+          "title": "10.1 约束三层模型",
+          "pageStart": 124,
+          "pageEnd": 125,
+          "anchor": "sec-10-1"
+        },
+        {
+          "ref": "10.2",
+          "title": "10.2 数据边界：先划清「进出」，再谈功能",
+          "pageStart": 126,
+          "pageEnd": 126,
+          "anchor": "sec-10-2"
+        },
+        {
+          "ref": "10.3",
+          "title": "10.3 权限模型",
+          "pageStart": 127,
+          "pageEnd": 128,
+          "anchor": "sec-10-3"
+        },
+        {
+          "ref": "10.4",
+          "title": "10.4 日志审计",
+          "pageStart": 129,
+          "pageEnd": 130,
+          "anchor": "sec-10-4"
+        },
+        {
+          "ref": "10.5",
+          "title": "10.5 评测门槛",
+          "pageStart": 131,
+          "pageEnd": 131,
+          "anchor": "sec-10-5"
+        },
+        {
+          "ref": "10.6",
+          "title": "10.6 三类护栏（Guardrails）",
+          "pageStart": 132,
+          "pageEnd": 133,
+          "anchor": "sec-10-6"
+        },
+        {
+          "ref": "10.7",
+          "title": "10.7 人工兜底：WorkBuddy 是放大器，不是替代者",
+          "pageStart": 134,
+          "pageEnd": 134,
+          "anchor": "sec-10-7"
+        },
+        {
+          "ref": "10.8",
+          "title": "10.8 上线自检清单",
+          "pageStart": 134,
+          "pageEnd": 135,
+          "anchor": "sec-10-8"
+        },
+        {
+          "ref": "10.9",
+          "title": "10.9 本章小结",
+          "pageStart": 136,
+          "pageEnd": 136,
+          "anchor": "sec-10-9"
+        }
+      ]
+    },
+    {
+      "orderNo": 11,
+      "title": "11 案例实战：企业 CFO 财务结算审核",
+      "anchor": "sec-11",
+      "pageStart": 137,
+      "pageEnd": 143,
+      "weight": 0.1136,
+      "sections": [
+        {
+          "ref": "11.1",
+          "title": "11.1 案例总原则：先证明，再放权",
+          "pageStart": 137,
+          "pageEnd": 137,
+          "anchor": "sec-11-1"
+        },
+        {
+          "ref": "11.2",
+          "title": "11.2 业务现场：先照顾情绪，再证明价值",
+          "pageStart": 138,
+          "pageEnd": 138,
+          "anchor": "sec-11-2"
+        },
+        {
+          "ref": "11.3",
+          "title": "11.3 第一阶段 · 立项期：确认这是一个值得做的审核场景",
+          "pageStart": 139,
+          "pageEnd": 139,
+          "anchor": "sec-11-3"
+        },
+        {
+          "ref": "11.4",
+          "title": "11.4 第二阶段 · 方案设计期：让业务材料变成可运行方案",
+          "pageStart": 139,
+          "pageEnd": 139,
+          "anchor": "sec-11-4"
+        },
+        {
+          "ref": "11.5",
+          "title": "11.5 第三阶段 · 开发推进期：把 POC 跑成可回放的评测系统",
+          "pageStart": 140,
+          "pageEnd": 140,
+          "anchor": "sec-11-5"
+        },
+        {
+          "ref": "11.6",
+          "title": "11.6 第四阶段 · 项目管理期：把一次交付变成下一次复用",
+          "pageStart": 140,
+          "pageEnd": 140,
+          "anchor": "sec-11-6"
+        },
+        {
+          "ref": "11.7",
+          "title": "11.7 审核领域范式 SOP：从一个结算场景到下一类审核场景",
+          "pageStart": 140,
+          "pageEnd": 140,
+          "anchor": "sec-11-7"
+        },
+        {
+          "ref": "11.8",
+          "title": "11.8 方法论全景：项目方法 × 案例落地 × 能力沉淀",
+          "pageStart": 141,
+          "pageEnd": 141,
+          "anchor": "sec-11-8"
+        },
+        {
+          "ref": "11.9",
+          "title": "11.9 结果与沉淀",
+          "pageStart": 141,
+          "pageEnd": 142,
+          "anchor": "sec-11-9"
+        },
+        {
+          "ref": "11.10",
+          "title": "11.10 本章小结",
+          "pageStart": 143,
+          "pageEnd": 143,
+          "anchor": "sec-11-10"
+        }
+      ]
+    },
+    {
+      "orderNo": 12,
+      "title": "12 关键问题 FAQ",
+      "anchor": "sec-12",
+      "pageStart": 144,
+      "pageEnd": 151,
+      "weight": 0.0795,
+      "sections": [
+        {
+          "ref": "12.1",
+          "title": "12.1 A 角色认知（4 问）",
+          "pageStart": 144,
+          "pageEnd": 144,
+          "anchor": "sec-12-1"
+        },
+        {
+          "ref": "12.2",
+          "title": "12.2 B 项目推进（4 问）",
+          "pageStart": 145,
+          "pageEnd": 145,
+          "anchor": "sec-12-2"
+        },
+        {
+          "ref": "12.3",
+          "title": "12.3 C 能力沉淀（4 问）",
+          "pageStart": 146,
+          "pageEnd": 146,
+          "anchor": "sec-12-3"
+        },
+        {
+          "ref": "12.4",
+          "title": "12.4 D 产品操作（5 问）",
+          "pageStart": 147,
+          "pageEnd": 148,
+          "anchor": "sec-12-4"
+        },
+        {
+          "ref": "12.5",
+          "title": "12.5 E 管理端与 WMA（4 问）",
+          "pageStart": 149,
+          "pageEnd": 149,
+          "anchor": "sec-12-5"
+        },
+        {
+          "ref": "12.6",
+          "title": "12.6 F 结课：回到岗位的上手清单",
+          "pageStart": 150,
+          "pageEnd": 150,
+          "anchor": "sec-12-6"
+        },
+        {
+          "ref": "12.7",
+          "title": "12.7 本章小结",
+          "pageStart": 151,
+          "pageEnd": 151,
+          "anchor": "sec-12-7"
+        }
+      ]
+    }
+  ],
+  "chunkCount": 291
+}

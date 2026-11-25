@@ -1,0 +1,11 @@
+node_modules/
+.next/
+out/
+*.log
+prisma/*.db
+prisma/*.db-journal
+prisma/*.db-wal
+prisma/*.db-shm
+src/generated/prisma/
+.env
+!.env.example
