@@ -74,8 +74,8 @@ export default async function AdminRunsPage() {
         <div className="card empty">
           <h3>还没有生成批次</h3>
           <p>
-            运行 <span className="mono">python -m fde_exam_gen seed-demo</span>{" "}
-            可以先导入演示题库；配置 LLM 后可运行正式生成流程。
+            在 <span className="mono">fde-exam/generator</span> 目录运行{" "}
+            <span className="mono">uv run fde-gen run</span> 即可开始正式生成。
           </p>
         </div>
       ) : (

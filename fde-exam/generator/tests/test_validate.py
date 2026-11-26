@@ -12,7 +12,8 @@ CHUNK = {
 def question(**overrides):
     data = {
         "type": "SINGLE",
-        "stem": "FDE 的核心工作方式是什么？",
+        "style": "JUDGMENT",
+        "stem": "某客户要求 FDE 在交付系统时同时沉淀可复用能力，下列判断正确的是？",
         "options": [
             OptionModel(key="A", content="前置到客户一线交付解决方案"),
             OptionModel(key="B", content="只负责售前讲方案"),
@@ -54,6 +55,27 @@ def test_source_page_out_of_chunk_range_rejected():
     result = validate_question(question(source_page=20), chunk=CHUNK)
     assert not result.ok
     assert any("R15" in error for error in result.errors)
+
+
+def test_navigation_question_rejected():
+    result = validate_question(
+        question(
+            stem="以下哪一项属于第 1 章《概览与方法论》的小节？",
+            style="JUDGMENT",
+        ),
+        chunk=CHUNK,
+    )
+    assert not result.ok
+    assert any("R17" in error for error in result.errors)
+
+
+def test_bare_definition_rejected():
+    result = validate_question(
+        question(stem="FDE 的本质定义是什么？", style="JUDGMENT"),
+        chunk=CHUNK,
+    )
+    assert not result.ok
+    assert any("R18" in error for error in result.errors)
 
 
 def test_evidence_mismatch_rejected():

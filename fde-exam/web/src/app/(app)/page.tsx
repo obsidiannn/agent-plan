@@ -127,9 +127,9 @@ export default async function HomePage() {
 
       {!poolReady ? (
         <div className="alert alert-warn" style={{ marginTop: 22 }}>
-          题库数量不足，暂时无法组出完整试卷。管理员可运行{" "}
-          <span className="mono">python -m fde_exam_gen seed-demo</span>{" "}
-          导入演示题库，或配置 LLM 后运行生成器。
+          题库数量不足，暂时无法组出完整试卷。管理员可在{" "}
+          <span className="mono">fde-exam/generator</span> 配置 LLM 后运行{" "}
+          <span className="mono">uv run fde-gen run</span> 生成并审核题目。
           {user.role === "ADMIN" ? (
             <>
               {" "}

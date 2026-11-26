@@ -26,7 +26,7 @@ class Repository:
             raise FileNotFoundError(
                 f"数据库不存在：{db_path}\n请先在 web 目录执行 prisma migrate dev"
             )
-        self.conn = sqlite3.connect(str(db_path), timeout=10)
+        self.conn = sqlite3.connect(str(db_path), timeout=30)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA busy_timeout=5000")
@@ -360,16 +360,17 @@ class Repository:
         self.conn.execute(
             """
             INSERT INTO questions
-              (id, type, stem, optionsJson, answerJson, explanation, difficulty,
+              (id, type, style, stem, optionsJson, answerJson, explanation, difficulty,
                chapterId, knowledgePoint, sourceChunkId, evidenceQuote, sourceRef,
                sourcePage, sourcePageEnd, contentHash, claim, claimHash, simhash,
                dedupeMetaJson, status, rejectReason, qualityScore, qualityDetailJson,
                generationRunId, promptVersion, version, createdAt, updatedAt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
             """,
             (
                 question_id,
                 question.type,
+                question.style,
                 question.stem,
                 options_json,
                 answer_json,
@@ -486,9 +487,16 @@ class Repository:
             candidates[row["status"]] = row["n"]
         chapters = self.conn.execute("SELECT COUNT(*) AS n FROM chapters").fetchone()["n"]
         chunks = self.conn.execute("SELECT COUNT(*) AS n FROM source_chunks").fetchone()["n"]
+        styles = {}
+        for row in self.conn.execute(
+            "SELECT COALESCE(style, 'UNKNOWN') AS style, COUNT(*) AS n "
+            "FROM questions WHERE status='APPROVED' GROUP BY style"
+        ).fetchall():
+            styles[row["style"]] = row["n"]
         return {
             "questions": counts,
             "approvedByType": by_type,
+            "approvedByStyle": styles,
             "candidates": candidates,
             "chapters": chapters,
             "chunks": chunks,
@@ -563,3 +571,55 @@ class Repository:
 
     def commit_changes(self) -> None:
         self.conn.commit()
+
+    def purge_prompt_versions(self, versions: Iterable[str]) -> dict:
+        versions = list(versions)
+        if not versions:
+            return {"questions": 0, "candidates": 0, "runs": 0}
+        placeholders = ",".join("?" for _ in versions)
+        with self.transaction():
+            question_rows = self.conn.execute(
+                f"SELECT id FROM questions WHERE promptVersion IN ({placeholders})",
+                versions,
+            ).fetchall()
+            question_ids = [row["id"] for row in question_rows]
+            candidate_count = self.conn.execute(
+                f"SELECT COUNT(*) AS n FROM question_candidates WHERE questionId IN "
+                f"(SELECT id FROM questions WHERE promptVersion IN ({placeholders}))",
+                versions,
+            ).fetchone()["n"]
+            run_rows = self.conn.execute(
+                f"SELECT id FROM generation_runs WHERE promptVersion IN ({placeholders})",
+                versions,
+            ).fetchall()
+            run_ids = [row["id"] for row in run_rows]
+            self.conn.execute(
+                f"DELETE FROM question_candidates WHERE questionId IN "
+                f"(SELECT id FROM questions WHERE promptVersion IN ({placeholders}))",
+                versions,
+            )
+            self.conn.execute(
+                f"DELETE FROM question_candidates WHERE runId IN "
+                f"(SELECT id FROM generation_runs WHERE promptVersion IN ({placeholders}))",
+                versions,
+            )
+            if question_ids:
+                q_placeholders = ",".join("?" for _ in question_ids)
+                self.conn.execute(
+                    f"UPDATE attempt_questions SET questionId = NULL "
+                    f"WHERE questionId IN ({q_placeholders})",
+                    question_ids,
+                )
+                self.conn.execute(
+                    f"DELETE FROM questions WHERE id IN ({q_placeholders})",
+                    question_ids,
+                )
+            self.conn.execute(
+                f"DELETE FROM generation_runs WHERE promptVersion IN ({placeholders})",
+                versions,
+            )
+        return {
+            "questions": len(question_ids),
+            "candidates": candidate_count,
+            "runs": len(run_ids),
+        }

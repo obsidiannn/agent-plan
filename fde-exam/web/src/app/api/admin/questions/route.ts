@@ -8,6 +8,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const status = url.searchParams.get("status") || "";
     const type = url.searchParams.get("type") || "";
+    const style = url.searchParams.get("style") || "";
     const chapterId = url.searchParams.get("chapterId") || "";
     const q = url.searchParams.get("q") || "";
     const page = Math.max(1, Number.parseInt(url.searchParams.get("page") || "1", 10));
@@ -19,6 +20,7 @@ export async function GET(request: Request) {
     const where = {
       ...(status ? { status } : {}),
       ...(type ? { type } : {}),
+      ...(style ? { style } : {}),
       ...(chapterId ? { chapterId } : {}),
       ...(q ? { stem: { contains: q } } : {}),
     };

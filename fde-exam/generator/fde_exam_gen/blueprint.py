@@ -2,6 +2,16 @@ from __future__ import annotations
 
 import math
 
+SINGLE_STYLES = [
+    "SCENARIO",
+    "TROUBLESHOOTING",
+    "COMPARISON",
+    "PROCESS",
+    "CALCULATION",
+    "JUDGMENT",
+]
+MULTIPLE_STYLES = ["JUDGMENT", "JUDGMENT", "COMPARISON", "PROCESS"]
+
 
 def _largest_remainder(total: int, weights: list[float]) -> list[int]:
     if not weights:
@@ -28,7 +38,12 @@ def _split_by_sections(total: int, count: int) -> list[int]:
     return [base + (1 if index < extra else 0) for index in range(count)]
 
 
-def build_units(chapters: list[dict], target: int) -> list[dict]:
+def build_units(
+    chapters: list[dict],
+    target: int,
+    single_style_override: str | None = None,
+    multiple_style_override: str | None = None,
+) -> list[dict]:
     single_total = math.ceil(target * 2 / 3)
     multiple_total = target - single_total
     weights = [max(0.01, float(chapter.get("weight") or 1)) for chapter in chapters]
@@ -36,6 +51,7 @@ def build_units(chapters: list[dict], target: int) -> list[dict]:
     multiple_quotas = _largest_remainder(multiple_total, weights)
 
     units: list[dict] = []
+    style_index = 0
     for index, chapter in enumerate(chapters):
         chunks = chapter.get("chunks") or []
         if not chunks:
@@ -72,6 +88,11 @@ def build_units(chapters: list[dict], target: int) -> list[dict]:
                     "pageEnd": chunk.get("pageEnd") or chapter.get("pageEnd"),
                     "nSingle": n_single,
                     "nMultiple": n_multiple,
+                    "singleStyle": single_style_override
+                    or SINGLE_STYLES[style_index % len(SINGLE_STYLES)],
+                    "multipleStyle": multiple_style_override
+                    or MULTIPLE_STYLES[style_index % len(MULTIPLE_STYLES)],
                 }
             )
+            style_index += 1
     return units

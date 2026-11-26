@@ -6,6 +6,7 @@ type Option = { key: string; content: string };
 type Question = {
   id: string;
   type: string;
+  style: string | null;
   stem: string;
   optionsJson: string;
   answerJson: string;
@@ -62,6 +63,7 @@ export function QuestionAdmin() {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
   const [type, setType] = useState("");
+  const [style, setStyle] = useState("");
   const [chapterId, setChapterId] = useState("");
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
@@ -77,6 +79,7 @@ export function QuestionAdmin() {
       });
       if (status) params.set("status", status);
       if (type) params.set("type", type);
+      if (style) params.set("style", style);
       if (chapterId) params.set("chapterId", chapterId);
       if (q.trim()) params.set("q", q.trim());
       const response = await fetch(`/api/admin/questions?${params.toString()}`);
@@ -94,7 +97,7 @@ export function QuestionAdmin() {
     } finally {
       setLoading(false);
     }
-  }, [chapterId, page, q, status, type]);
+  }, [chapterId, page, q, status, style, type]);
 
   useEffect(() => {
     load();
@@ -155,6 +158,22 @@ export function QuestionAdmin() {
           <option value="">全部题型</option>
           <option value="SINGLE">单选题</option>
           <option value="MULTIPLE">多选题</option>
+        </select>
+        <select
+          className="select"
+          value={style}
+          onChange={(event) => {
+            setStyle(event.target.value);
+            setPage(1);
+          }}
+        >
+          <option value="">全部风格</option>
+          <option value="SCENARIO">场景决策</option>
+          <option value="TROUBLESHOOTING">故障排查</option>
+          <option value="COMPARISON">对比选型</option>
+          <option value="PROCESS">流程阶段</option>
+          <option value="CALCULATION">成本口径</option>
+          <option value="JUDGMENT">规则判断</option>
         </select>
         <select
           className="select"
@@ -253,6 +272,7 @@ export function QuestionAdmin() {
                       </span>
                       <div className="tiny muted" style={{ marginTop: 3 }}>
                         {item.difficulty}
+                        {item.style ? ` · ${item.style}` : ""}
                       </div>
                     </td>
                     <td>{item.qualityScore != null ? item.qualityScore.toFixed(2) : "-"}</td>

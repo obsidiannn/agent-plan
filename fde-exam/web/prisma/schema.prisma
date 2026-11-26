@@ -82,6 +82,7 @@ model SourceChunk {
 model Question {
   id            String @id @default(cuid())
   type          String
+  style         String? // SCENARIO | TROUBLESHOOTING | COMPARISON | PROCESS | CALCULATION | JUDGMENT
   stem          String
   optionsJson   String
   answerJson    String

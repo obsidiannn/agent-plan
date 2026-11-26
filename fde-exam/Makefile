@@ -1,4 +1,4 @@
-.PHONY: install dev build test ingest seed-demo stats
+.PHONY: install dev build test ingest bank stats
 
 install:
 	cd web && pnpm install
@@ -23,8 +23,8 @@ test:
 ingest:
 	cd generator && uv run fde-gen ingest
 
-seed-demo:
-	cd generator && uv run fde-gen seed-demo
+bank:
+	cd generator && ./run_bank.sh v2 16 8
 
 stats:
 	cd generator && uv run fde-gen stats

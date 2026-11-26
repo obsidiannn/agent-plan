@@ -19,14 +19,64 @@ SYSTEM_PROMPT = """你是「腾讯云 FDE 课程」的命题专家。你的唯�
 1. 只能考查原文明确陈述的内容；原文没有的信息一律不得作为题目或答案。
 2. 每题只考查一个独立事实（claim），不要把多个知识点塞进一道题。
 3. 单选题必须有 4 个选项，有且仅有 1 个正确答案。
-4. 多选题必须有 4 个选项，正确答案为 2～3 个（不要 4 个全对）。
-5. 错误选项必须“合理但明确错误”：与正确答案同类别、同粒度、长度相近；不得使用“以上都对”“以上都不对”“以上均是”。
+4. 多选题必须有 4 个选项，正确答案为 2～3 个（不要 4 个全对），且至少有一个错误选项是常见误区。
+5. 错误选项必须“合理但明确错误”：与正确答案同类别、同粒度、长度相近，模拟客户或新人常见的错误理解；不得使用“以上都对”“以上都不对”“以上均是”。
 6. 题干必须自洽、无歧义，不得泄露答案，不得使用双重否定。
 7. 必须给出原文中连续的证据片段 evidence_quote，长度 8～300 字，且逐字来自原文（可去掉多余空白）。
 8. 必须给出 source_page：证据片段所在的 PDF 页码，只能使用原文片段中标注的页码。
-9. 必须给出 claim：一句话概括本题考查的唯一事实，不能与题干重复。
+9. 必须给出 claim：一句话概括本题考查的唯一规则/判断/事实，不能与题干重复，不能是“某小节属于某章”。
 10. 不要考查页码、版本号、日期等无学习价值的细节，除非原文将其作为核心知识。
-11. 只输出 JSON，不要输出 Markdown 代码块、解释或前后缀。"""
+11. 只输出 JSON，不要输出 Markdown 代码块、解释或前后缀。
+
+【必须遵守的出题形态】
+12. 严禁目录题、章节归属题、页码题。不得出现“以下哪一项属于第 X 章/某小节”“以下哪些小节属于第 X 章”“课程目录”“位于第 X 章”“章节/小节归属”等问法；题干和选项都不能只是章节标题或小节标题。
+13. 题干必须从以下真实工作情境切入：客户场景与选型、方案决策与边界判断、故障排查、流程/阶段顺序、成本/积分/数量口径、方案对比、常见误区辨析。不能只问“X 是什么/定义是什么”。
+14. 单选：3 个干扰项都要有迷惑性，分别对应一种常见误解；不要用明显荒谬、与题干无关或一眼可排除的选项。
+15. 多选：正确项 2～3 个；至少 1 个错误项是“听起来合理但原文明确否定”的常见误区。
+16. 解析必须逐项说明：正确项为什么对，至少两个干扰项错在哪里，不能只重复题干。
+17. 必须填写 style，取值只能是：
+    SCENARIO（客户场景/选型/决策）、TROUBLESHOOTING（故障排查）、
+    COMPARISON（方案/产品/概念对比）、PROCESS（流程/阶段/顺序）、
+    CALCULATION（成本/积分/数量口径）、JUDGMENT（规则/边界/正误判断）。
+18. 同一知识点不要反复出同一种问法；优先考“怎么判断、怎么选、先做什么、为什么错”，而不是“是什么”。"""
+
+
+STYLE_GUIDE = {
+    "SCENARIO": "客户场景/选型/决策：给一个客户或项目情境，问应该怎么判断、选哪个方案、下一步做什么。",
+    "TROUBLESHOOTING": "故障排查：给一个具体故障现象，问正确的排查顺序或根因。",
+    "COMPARISON": "方案对比：比较两个产品/做法/阶段的差异，问哪个更合适或差异是什么。",
+    "PROCESS": "流程/阶段/顺序：问某阶段该做什么、先后顺序、何时确定某件事。",
+    "CALCULATION": "成本/积分/数量口径：给一个计费或投入情境，问什么动作计费、成本怎么算。",
+    "JUDGMENT": "规则/边界/正误判断：给一个说法或做法，判断是否符合原文规则。",
+}
+
+FEW_SHOT_EXAMPLES = """
+【风格示例：只模仿提问方式、干扰项设计和解析方式；严禁照抄题干、选项和考点】
+
+示例 1（SCENARIO 单选）
+某客户 IT 团队希望从零构建一个与内部 ERP/CRM 深度集成、可长期迭代的定制化 AI 应用。应优先推荐哪款产品？
+A. WorkBuddy（办公助理）
+B. CodeBuddy（编程助手）
+C. ADP（智能体开发平台）
+D. Miora（创意工作室）
+答案：C
+
+示例 2（TROUBLESHOOTING 单选）
+客户现场的 MCP Server 一直连不上（客户端显示红色状态）。按正确的排查思路，应该怎么查？
+A. 按从外到内排查：先查网络出口、再查配置层级、最后查凭据与权限
+B. 第一步就重写整个 MCP 配置文件，反复换地址直到连上
+C. 红色状态大多是第三方服务不稳定，优先换一个同类 MCP Server
+D. 红色状态基本都是凭据失效，直接重新生成 Token 即可
+答案：A
+
+示例 3（COMPARISON 多选）
+一个能交付的 Harness 需要补齐「五件套」。下列属于五件套的有？
+A. 工具接入——让模型能调用外部 API/数据库/搜索
+B. 输入输出契约——定义输入 Schema 和输出 Schema 的校验
+C. 模型微调——用客户数据持续训练专属模型
+D. 护栏门禁——输入侧过滤敏感请求，输出侧检查合规性
+答案：A、B、D
+"""
 
 
 class LLMError(RuntimeError):
@@ -71,7 +121,7 @@ class LLMClient:
     def _chat(self, system: str, user: str, temperature: float | None = None) -> str:
         if not self.client:
             raise LLMError(
-                "未配置 LLM_API_KEY。请配置 OpenAI 兼容接口，或先运行 seed-demo 导入演示题库。"
+                "未配置 LLM Key。请在 generator/.env 配置 LLM_API_KEY 或 OPENAI_API_KEY。"
             )
         last_error: Exception | None = None
         for attempt in range(self.settings.llm_max_retries):
@@ -106,12 +156,17 @@ class LLMClient:
         n_single: int,
         n_multiple: int,
         difficulty: str = "MEDIUM",
+        single_style: str = "SCENARIO",
+        multiple_style: str = "COMPARISON",
     ) -> GeneratedQuestionBatch:
         claims = "\n".join(f"- {claim}" for claim in existing_claims[-20:]) or "（无）"
         user = f"""【章节】{chapter_title}
 【小节】{section_title}
 【难度】{difficulty}
 【本次任务】生成 {n_single} 道单选题、{n_multiple} 道多选题。
+【目标风格】
+- 单选题：{single_style} —— {STYLE_GUIDE.get(single_style, "")}
+- 多选题：{multiple_style} —— {STYLE_GUIDE.get(multiple_style, "")}
 
 【课程原文】（片段前标注 PDF 页码）
 [第 {source_page} 页]
@@ -120,12 +175,15 @@ class LLMClient:
 【该知识点已考过的事实（禁止重复）】
 {claims}
 
+{FEW_SHOT_EXAMPLES}
+
 只输出如下 JSON 结构：
 {{
   "questions": [
     {{
       "type": "SINGLE",
-      "stem": "题干",
+      "style": "{single_style}",
+      "stem": "题干（必须是场景/排查/对比/流程/口径/判断，不能是目录题）",
       "options": [
         {{"key": "A", "content": "选项A"}},
         {{"key": "B", "content": "选项B"}},
@@ -136,7 +194,25 @@ class LLMClient:
       "explanation": "解析：说明为什么选 B，并指出其他选项错在哪里",
       "evidence_quote": "原文中的连续片段",
       "source_page": {source_page},
-      "claim": "一句话概括本题考查的唯一事实",
+      "claim": "一句话概括本题考查的唯一规则/判断，不能是章节归属",
+      "knowledge_point": "{section_title}",
+      "difficulty": "{difficulty}"
+    }},
+    {{
+      "type": "MULTIPLE",
+      "style": "{multiple_style}",
+      "stem": "题干（多选：下列说法正确的有/应包含哪些，必须有 2～3 个正确项）",
+      "options": [
+        {{"key": "A", "content": "选项A"}},
+        {{"key": "B", "content": "选项B"}},
+        {{"key": "C", "content": "选项C"}},
+        {{"key": "D", "content": "选项D"}}
+      ],
+      "answer": ["A", "C"],
+      "explanation": "解析：逐项说明正确项为什么对，至少两个错误项错在哪里",
+      "evidence_quote": "原文中的连续片段",
+      "source_page": {source_page},
+      "claim": "一句话概括本题考查的唯一规则/判断，不能是章节归属",
       "knowledge_point": "{section_title}",
       "difficulty": "{difficulty}"
     }}

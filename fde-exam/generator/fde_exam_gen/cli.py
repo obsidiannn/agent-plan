@@ -7,7 +7,6 @@ from pathlib import Path
 import typer
 
 from fde_exam_gen.config import load_settings
-from fde_exam_gen.demo import seed_demo
 from fde_exam_gen.generate import run_generation
 from fde_exam_gen.ingest import import_ingest, run_ingest
 from fde_exam_gen.repository import Repository
@@ -44,13 +43,6 @@ def ingest(
     _print(summary)
 
 
-@app.command("seed-demo")
-def seed_demo_cmd():
-    """从已导入的章节结构生成结构型演示题库（无需 LLM）。"""
-    settings = load_settings()
-    _print(seed_demo(settings))
-
-
 @app.command()
 def run(
     target: int = typer.Option(150, help="候选题目数量"),
@@ -58,8 +50,10 @@ def run(
     prompt_version: str = typer.Option("v1"),
     chapter: str | None = typer.Option(None, help="只生成标题包含该字符串的章节"),
     auto_approve: bool = typer.Option(False, "--auto-approve"),
+    single_style: str | None = typer.Option(None, help="强制单选题风格"),
+    multiple_style: str | None = typer.Option(None, help="强制多选题风格"),
 ):
-    """调用 LLM 正式生成题目（需要 LLM_API_KEY）。"""
+    """调用 LLM 正式生成题目（LLM_API_KEY 或 OPENAI_API_KEY）。"""
     settings = load_settings()
     result = run_generation(
         settings,
@@ -68,8 +62,40 @@ def run(
         prompt_version=prompt_version,
         chapter_filter=chapter,
         auto_approve=auto_approve,
+        single_style=single_style,
+        multiple_style=multiple_style,
     )
     _print(result)
+
+
+@app.command("purge-demo")
+def purge_demo():
+    """删除旧的目录型演示题库（promptVersion=demo-v1）。"""
+    settings = load_settings()
+    repo = Repository(settings.db_path)
+    result = repo.purge_prompt_versions(["demo-v1"])
+    repo.close()
+    _print(result)
+
+
+@app.command("bulk-approve")
+def bulk_approve(
+    prompt_version: str = typer.Option(..., help="只审核该 Prompt 版本的题目"),
+    min_quality: float = typer.Option(4.0, help="最低质量分"),
+):
+    """把某一批次中达到质量线的待审题批量设为通过（仍需人工抽检）。"""
+    settings = load_settings()
+    repo = Repository(settings.db_path)
+    rows = repo.conn.execute(
+        "SELECT id FROM questions WHERE promptVersion = ? AND status = 'PENDING_REVIEW' "
+        "AND qualityScore >= ?",
+        (prompt_version, min_quality),
+    ).fetchall()
+    for row in rows:
+        repo.set_question_status(row["id"], "APPROVED", "bulk-approve", "批量通过")
+    repo.commit_changes()
+    repo.close()
+    typer.echo(f"已通过 {len(rows)} 题（promptVersion={prompt_version}）")
 
 
 @app.command()

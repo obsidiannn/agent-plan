@@ -50,14 +50,18 @@ uv run fde-gen ingest
 - 提取图片到 `data/source/images/`
 - 把章节和 291 个分块写入 SQLite
 
-### 3. 导入演示题库（可选，无需 LLM）
+### 3. 生成题库
 
 ```bash
 cd ../generator
-uv run fde-gen seed-demo
+uv run fde-gen run --target 150 --seed 42 --prompt-version v1
 ```
 
-演示题库是基于 12 章目录结构生成的结构型题目（88 单选 + 24 多选），仅用于本地跑通完整流程。正式题库请配置 LLM 后运行生成器并人工审核。
+生成完成后在 `/admin/questions` 审核。只有 `APPROVED` 题目会进入组卷池。
+
+> 旧版 `seed-demo` 会生成“某小节属于哪一章”这类目录题，已从 CLI 移除；可用 `uv run fde-gen purge-demo` 清理历史演示题。
+>
+> 题库检查：`uv run fde-gen stats`、`uv run fde-gen scan --threshold 4`。
 
 ### 4. 启动
 
@@ -74,6 +78,8 @@ pnpm dev
 | `demo` | `demo123456` | 普通用户 |
 
 > 首次部署请立即修改默认密码，并替换 `AUTH_SECRET`。
+
+当前示例库：**102 道已审核题**（76 单选 + 26 多选），覆盖 12 章；另有 7 道旧批次待审题。目录/章节归属类题目已全部清理。
 
 ## 正式题库生成
 
@@ -134,7 +140,35 @@ uv run fde-gen import-review --file reports/review.csv
 uv run fde-gen run --chapter "03 人工智能工程" --target 30
 ```
 
-> 演示题库和正式题库可以共存；如不需要演示题，可在管理端下架或删除后重新生成。
+> 如需清理历史演示题，可执行 `uv run fde-gen purge-demo`。
+
+## 出题规则
+
+生成器明确禁止“目录题 / 章节归属题 / 页码题”，例如：
+
+- ❌ 以下哪一项属于第 3 章的小节？
+- ❌ 以下哪些小节属于第 5 章？
+- ❌ 某小节位于第几页？
+
+必须使用真实工作场景切入，题型风格包括：
+
+| style | 说明 | 示例方向 |
+| --- | --- | --- |
+| `SCENARIO` | 客户场景 / 选型 / 决策 | 某客户要 ERP 集成，应推荐哪个产品 |
+| `TROUBLESHOOTING` | 故障排查 | MCP 一直连不上，正确排查顺序 |
+| `COMPARISON` | 方案 / 产品 / 阶段对比 | L2 数据 Demo 与 L1/L3 的区别 |
+| `PROCESS` | 流程 / 阶段 / 顺序 | 验收标准应在何时确定 |
+| `CALCULATION` | 成本 / 积分 / 数量口径 | WMA 哪些动作消耗积分 |
+| `JUDGMENT` | 规则 / 边界 / 正误判断 | 某个说法是否符合原文规则 |
+
+硬性规则：
+
+- 单选：3 个干扰项都要对应常见误解，不能有明显荒谬选项。
+- 多选：2～3 个正确项，至少一个错误项是“听起来合理但原文否定”的误区。
+- 解析必须逐项说明正确项为什么对、至少两个干扰项错在哪里。
+- 同一知识点禁止反复出同一种问法。
+
+相关代码：`generator/fde_exam_gen/llm.py`（Prompt）、`validate.py`（R17–R20）、`blueprint.py`（风格分配）。
 
 ## 考试规则
 
@@ -196,6 +230,6 @@ Web 配置见 `web/.env.example`；生成器配置见 `generator/.env.example`�
 ## 说明与限制
 
 - `doc/fde.pdf` 仅用于内部学习与出题，不对外分发。
-- 演示题库是**目录结构型题目**，目的是在没有 LLM Key 时也能跑通系统；正式使用前建议配置 LLM 生成并人工审核。
+- 题库必须通过 LLM 生成；生成器已禁止目录/章节归属题，并强制场景、排查、对比、流程、口径、判断题。
 - 当前项目为单机 SQLite 架构，适合内部培训/小团队；如要多实例部署，请迁移到 PostgreSQL 并补充共享 session/限流。
 - 管理端目前支持审核、上下架、批次查看；题目在线编辑可作为后续增强。

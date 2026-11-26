@@ -5,6 +5,7 @@ from fde_exam_gen.normalize import content_hash, hamming, jaccard, normalize, si
 def make_question(stem: str, options: list[tuple[str, str]], answer: list[str]):
     return GeneratedQuestion(
         type="SINGLE",
+        style="JUDGMENT",
         stem=stem,
         options=[OptionModel(key=key, content=content) for key, content in options],
         answer=answer,

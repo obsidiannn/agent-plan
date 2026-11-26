@@ -12,5 +12,6 @@ generator/.pytest_cache/
 generator/__pycache__/
 generator/**/__pycache__/
 generator/reports/*.csv
+generator/reports/*.log
 data/source/images/
 .DS_Store

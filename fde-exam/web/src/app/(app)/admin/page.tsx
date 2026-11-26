@@ -159,7 +159,10 @@ export default async function AdminHomePage() {
           </div>
           <h3 style={{ marginTop: 20 }}>最近生成批次</h3>
           {runs.length === 0 ? (
-            <p className="muted small">暂无生成记录。可运行 Python 生成器或 seed-demo。</p>
+            <p className="muted small">
+              暂无生成记录。可在 generator 目录运行{" "}
+              <span className="mono">uv run fde-gen run</span>。
+            </p>
           ) : (
             <ul className="notice-list">
               {runs.map((run) => (

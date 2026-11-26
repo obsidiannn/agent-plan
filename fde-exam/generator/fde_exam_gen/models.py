@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 @dataclass
@@ -63,9 +63,25 @@ class OptionModel(BaseModel):
     key: Literal["A", "B", "C", "D", "E", "F"]
     content: str = Field(min_length=1, max_length=200)
 
+    @field_validator("key", mode="before")
+    @classmethod
+    def normalize_key(cls, value):
+        return str(value).strip().upper()
+
+
+QuestionStyle = Literal[
+    "SCENARIO",
+    "TROUBLESHOOTING",
+    "COMPARISON",
+    "PROCESS",
+    "CALCULATION",
+    "JUDGMENT",
+]
+
 
 class GeneratedQuestion(BaseModel):
     type: Literal["SINGLE", "MULTIPLE"]
+    style: QuestionStyle
     stem: str = Field(min_length=8, max_length=300)
     options: list[OptionModel] = Field(min_length=4, max_length=6)
     answer: list[str] = Field(min_length=1, max_length=4)
@@ -75,6 +91,18 @@ class GeneratedQuestion(BaseModel):
     claim: str = Field(min_length=5, max_length=120)
     knowledge_point: str
     difficulty: Literal["EASY", "MEDIUM", "HARD"]
+
+    @field_validator("type", "style", mode="before")
+    @classmethod
+    def normalize_upper(cls, value):
+        return str(value).strip().upper()
+
+    @field_validator("answer", mode="before")
+    @classmethod
+    def normalize_answer(cls, value):
+        if isinstance(value, list):
+            return [str(item).strip().upper() for item in value]
+        return value
 
 
 class GeneratedQuestionBatch(BaseModel):
@@ -88,8 +116,13 @@ class JudgeResult(BaseModel):
     distractor: int = Field(ge=1, le=5)
     difficulty_match: int = Field(ge=1, le=5)
     overall: float
-    verdict: Literal["PASS", "FAIL"]
+    verdict: Literal["PASS", "FAIL", "REVISE"]
     issues: list[str] = Field(default_factory=list)
+
+    @field_validator("verdict", mode="before")
+    @classmethod
+    def normalize_verdict(cls, value):
+        return str(value).strip().upper()
 
 
 class BlindResult(BaseModel):
